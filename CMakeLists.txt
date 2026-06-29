@@ -46,6 +46,9 @@ llvm_map_components_to_libnames(LLVM_LIBS
         Core
         Option
         CodeGen
+        X86CodeGen
+        X86Info
+        X86Desc
         X86Disassembler
         RISCVInfo
         RISCVDesc
@@ -60,3 +63,9 @@ llvm_map_components_to_libnames(LLVM_LIBS
 )
 
 target_link_libraries(sbt ${LLVM_LIBS})
+
+set_target_properties(sbt PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+        COMPILE_FLAGS "-fno-rtti" # 关闭RTTI
+)

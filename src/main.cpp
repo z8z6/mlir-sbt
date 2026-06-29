@@ -1,11 +1,22 @@
+#include "Object/File.h"
 #include "Support/Option.h"
+#include "Target/X86Machine.h"
+
+#include "llvm/Support/InitLLVM.h"
 
 using namespace llvm::cl;
 using namespace llvm;
-using namespace sbt;
+using namespace z8;
 
 int main(int argc, char** argv) {
-  HideUnrelatedOptions(sbt::Option::SbtCategory);
-  ParseCommandLineOptions(argc, argv);
+  InitLLVM X(argc, argv);
+
+  HideUnrelatedOptions(z8::Option::SbtCategory);
+  ParseCommandLineOptions(argc, argv, "Binary Translator\n");
+
+  File F(z8::Option::InputBinary);
+  F.disas();
+  F.printIR0();
+
   return 0;
 }

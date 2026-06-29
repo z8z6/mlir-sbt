@@ -7,9 +7,16 @@
 
 #include <llvm/Support/CommandLine.h>
 
-namespace sbt{
+namespace z8{
 class Option {
 public:
-  inline static llvm::cl::OptionCategory SbtCategory = {"Sbt Category", "Sbt Category"};
+  inline static llvm::cl::OptionCategory SbtCategory = {"Sbt Category", "Sbt Option Category"};
+
+  inline static llvm::cl::opt<std::string> InputBinary {
+    "i",
+    llvm::cl::Required,
+    llvm::cl::cat(SbtCategory),
+    llvm::cl::desc("Input binary file name")
+  };
 };
 }
