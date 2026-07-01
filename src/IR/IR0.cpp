@@ -18,7 +18,7 @@ IR0::IR0(llvm::MCInst inst, uint64_t addr)
 
 void IR0::print(BaseMachine* M, raw_ostream& out) const
 {
-  out << "0x" << format_hex(Addr, 10) << ": ";
+  out <<  format_hex(Addr, 10) << ": ";
   M->getIP().printInst(&Inst, Addr, "", M->getSTI(), out);
   out << "\n";
 }

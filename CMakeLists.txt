@@ -13,6 +13,7 @@ find_package(MLIR REQUIRED CONFIG HINTS
         NO_DEFAULT_PATH)
 # 获取 tblgen 程序的位置
 find_program(LLVM_TABLEGEN_EXE "llvm-tblgen" ${LLVM_TOOLS_BINARY_DIR} NO_DEFAULT_PATH)
+find_program(MLIR_TABLEGEN_EXE "mlir-tblgen" ${LLVM_TOOLS_BINARY_DIR} NO_DEFAULT_PATH)
 
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
@@ -35,11 +36,21 @@ include(HandleLLVMOptions)
 # 2. 本项目的代码文件
 # tblgen 先生成定义
 add_subdirectory(tblgen)
+add_subdirectory(mlir)
 
-file(GLOB_RECURSE SOURCE_FILES src/*.cpp include/*.h)
+file(GLOB_RECURSE SOURCE_FILES
+        src/*.cpp
+        include/*.h
+        ${CMAKE_BINARY_DIR}/tblgen/*.cpp
+)
 add_executable(sbt ${SOURCE_FILES})
 
-target_include_directories(sbt PUBLIC include)
+target_include_directories(sbt PUBLIC
+        include
+        ${CMAKE_BINARY_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/third/llvm/build/lib/Target/X86
+        ${CMAKE_CURRENT_SOURCE_DIR}/third/llvm/llvm/lib
+)
 
 llvm_map_components_to_libnames(LLVM_LIBS
         Support
@@ -62,7 +73,17 @@ llvm_map_components_to_libnames(LLVM_LIBS
         TargetParser
 )
 
-target_link_libraries(sbt ${LLVM_LIBS})
+set(MLIR_LIBS
+        MLIRIR
+        MLIRSupport
+        MLIRParser
+        MLIRDialect
+        MLIRArithDialect
+        MLIRTransformUtils
+)
+
+
+target_link_libraries(sbt ${LLVM_LIBS} ${MLIR_LIBS})
 
 set_target_properties(sbt PROPERTIES
         CXX_STANDARD 17
