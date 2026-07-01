@@ -79,6 +79,7 @@ set(MLIR_LIBS
         MLIRParser
         MLIRDialect
         MLIRArithDialect
+        MLIRMemRefDialect
         MLIRTransformUtils
 )
 

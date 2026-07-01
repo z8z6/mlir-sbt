@@ -16,7 +16,9 @@ int main(int argc, char** argv) {
 
   File F(z8::Option::InputBinary);
   F.disas();
-  F.printIR0();
+  F.IR0Ctx.print(F.Machine);
+  F.IR1Ctx.transform(F.IR0Ctx);
+  F.IR1Ctx.print();
 
   return 0;
 }

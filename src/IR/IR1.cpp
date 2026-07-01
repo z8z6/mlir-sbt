@@ -5,7 +5,8 @@
 #include "IR/IR1.h"
 #include "IR/IR0.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/IR/BuiltinOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Verifier.h"
@@ -33,26 +34,14 @@ void AddOp::build(OpBuilder &builder, OperationState &state,
 #define GET_OP_CLASSES
 #include "mlir/IR1Ops.cpp.inc"
 
-namespace {
-class IR1Context {
-public:
-  MLIRContext Ctx;
-  ModuleOp Module; // 持有 MLIR 模块
-  OpBuilder Builder;            // 用于创建 IR
-
-  IR1Context();
-  void transform(const std::vector<IR0>& IRs);
-  void verify();
-};
-
-} // namespace
-
 
 IR1Context::IR1Context() : Builder(&Ctx)  {
   Ctx.getOrLoadDialect<IR1Dialect>();
   Ctx.getOrLoadDialect<arith::ArithDialect>();
+  Ctx.getOrLoadDialect<memref::MemRefDialect>();
 
   Module = ModuleOp::create(Builder.getUnknownLoc());
+  Builder = OpBuilder(Module.getBody(), Module.getBody()->end());
 }
 
 void IR1Context::verify() {
@@ -60,10 +49,38 @@ void IR1Context::verify() {
     Module.emitError("module verification error");
 }
 
-void IR1Context::transform(const std::vector<IR0> &IRs) {
-  for (auto &IR : IRs) {
+
+Value IR1Context::imm() {
+  auto loc = Builder.getUnknownLoc();
+  Type Ty = Builder.getI32Type();
+  return arith::ConstantOp::create(Builder, loc, Ty, Builder.getIntegerAttr(Ty, 1));
+}
+
+Value IR1Context::load() {
+  auto loc = Builder.getUnknownLoc();
+  Value idx = arith::ConstantIndexOp::create(Builder, loc, 5);
+  Value Array;
+  return memref::LoadOp::create(Builder, loc, Array, idx);
+}
+
+void IR1Context::store() {
+  auto loc = Builder.getUnknownLoc();
+  Value idx = arith::ConstantIndexOp::create(Builder, loc, 5);
+  Value Array;
+  memref::StoreOp::create(Builder, loc, Array, idx);
+}
+
+void IR1Context::transform(IR0Context& IR0Ctx) {
+  for (auto &IR : IR0Ctx.IRs) {
     auto op = IR.Inst.getOpcode();
+    auto addr = IR.Addr;
+    auto loc = Builder.getUnknownLoc();
+    auto AddOp = arith::AddIOp::create(Builder, loc, imm(), imm());
   }
+}
+
+void IR1Context::print() {
+  Module.dump();
 }
 
 bool translateMCInst(const llvm::MCInst& Inst, mlir::Location Loc);

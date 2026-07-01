@@ -61,13 +61,9 @@ void File::disas()
         continue;
       }
 
-      IR0s.emplace_back(Inst, CurAddr);
+      IR0Ctx.IRs.emplace_back(Inst, CurAddr);
 
       Offset += InstSize;
     }
   }
-}
-
-void File::printIR0() {
-  for (const auto& IR : IR0s) IR.print(Machine);
 }

@@ -6,9 +6,8 @@
 #pragma once
 
 #include "IR/IR0.h"
-
+#include "IR/IR1.h"
 #include "llvm/Object/ObjectFile.h"
-
 
 namespace z8 {
 class File {
@@ -18,11 +17,11 @@ public:
   llvm::object::ObjectFile* O;
   BaseMachine* Machine;
 
-  std::vector<IR0> IR0s;
+  IR0Context IR0Ctx;
+  IR1Context IR1Ctx;
 
   explicit File(std::string Name);
   void disas();
-  void printIR0();
 };
 }
 

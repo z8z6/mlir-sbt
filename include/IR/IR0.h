@@ -25,4 +25,11 @@ public:
 
   void print(BaseMachine* M, llvm::raw_ostream& out = llvm::outs()) const;
 };
+
+class IR0Context {
+public:
+  std::vector<IR0> IRs;
+
+  void print(BaseMachine*);
+};
 };

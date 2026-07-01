@@ -22,3 +22,7 @@ void IR0::print(BaseMachine* M, raw_ostream& out) const
   M->getIP().printInst(&Inst, Addr, "", M->getSTI(), out);
   out << "\n";
 }
+
+void IR0Context::print(BaseMachine* Machine) {
+  for (const auto& IR : IRs) IR.print(Machine);
+}
