@@ -34,9 +34,10 @@ set_target_properties(ir1-tblgen PROPERTIES
         COMPILE_FLAGS "-fno-rtti" # 关闭RTTI
 )
 
-set(IR1_X86_Converter "${CMAKE_CURRENT_BINARY_DIR}/IR1Converter.cpp")
+set(IR1_X86_Header "${CMAKE_CURRENT_BINARY_DIR}/X86IR1Converter.h")
+set(IR1_X86_Impl "${CMAKE_CURRENT_BINARY_DIR}/X86IR1Converter.cpp")
 add_custom_command(
-        OUTPUT ${IR1_X86_Converter}
+        OUTPUT ${IR1_X86_Header}
         # 依赖 td 文件，td 修改自动重新生成
         DEPENDS IR1X86.td ir1-tblgen
         # tblgen 执行命令
@@ -44,14 +45,29 @@ add_custom_command(
         -I ${CMAKE_SOURCE_DIR}/third/llvm/llvm/include
         -I ${CMAKE_SOURCE_DIR}/third/llvm/llvm/include/llvm/Target
         -I ${CMAKE_SOURCE_DIR}/third/llvm/llvm/lib/Target/X86
-        --gen-x86-ir1
+        --gen-x86-header
         ${CMAKE_CURRENT_SOURCE_DIR}/IR1X86.td
-        -o ${IR1_X86_Converter}
-        COMMENT "Generating IR1Converter using ir1-tblgen"
+        -o ${IR1_X86_Header}
+        COMMENT "Generating IR1 X86 Header using ir1-tblgen"
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+add_custom_command(
+        OUTPUT ${IR1_X86_Impl}
+        # 依赖 td 文件，td 修改自动重新生成
+        DEPENDS IR1X86.td ir1-tblgen
+        # tblgen 执行命令
+        COMMAND $<TARGET_FILE:ir1-tblgen>
+        -I ${CMAKE_SOURCE_DIR}/third/llvm/llvm/include
+        -I ${CMAKE_SOURCE_DIR}/third/llvm/llvm/include/llvm/Target
+        -I ${CMAKE_SOURCE_DIR}/third/llvm/llvm/lib/Target/X86
+        --gen-x86-impl
+        ${CMAKE_CURRENT_SOURCE_DIR}/IR1X86.td
+        -o ${IR1_X86_Impl}
+        COMMENT "Generating IR1 X86 Impl using ir1-tblgen"
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 add_custom_target(
         ir1-x86-converter-gen
-        DEPENDS ${IR1_X86_Converter}
+        DEPENDS ${IR1_X86_Header} ${IR1_X86_Impl}
 )

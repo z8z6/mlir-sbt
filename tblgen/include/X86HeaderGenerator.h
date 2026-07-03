@@ -9,13 +9,13 @@
 
 namespace z8
 {
-class IR1Converter {
+class X86HeaderGenerator {
   const llvm::RecordKeeper &RK;
 
 public:
-  explicit IR1Converter(const llvm::RecordKeeper &RK) : RK(RK) {}
+  explicit X86HeaderGenerator(const llvm::RecordKeeper &RK) : RK(RK) {}
   void run(llvm::raw_ostream &OS) const;
 };
 
-bool EmitIR1(llvm::raw_ostream &OS, const llvm::RecordKeeper &RK);
+bool EmitX86Header(llvm::raw_ostream &OS, const llvm::RecordKeeper &RK);
 }

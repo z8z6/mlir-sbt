@@ -42,8 +42,9 @@ file(GLOB_RECURSE SOURCE_FILES
         src/*.cpp
         include/*.h
         ${CMAKE_BINARY_DIR}/tblgen/*.cpp
+        ${CMAKE_BINARY_DIR}/tblgen/*.h
 )
-add_executable(sbt ${SOURCE_FILES})
+add_executable(sbt ${SOURCE_FILES} )
 
 target_include_directories(sbt PUBLIC
         include

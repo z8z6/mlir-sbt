@@ -4,6 +4,7 @@
 //
 #include "IR/IR1.h"
 #include "IR/IR0.h"
+#include "IR/IR1Converter.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 
@@ -24,11 +25,6 @@ void IR1Dialect::initialize() {
 #define GET_OP_LIST
 #include "mlir/IR1Ops.cpp.inc"
     >();
-}
-
-void AddOp::build(OpBuilder &builder, OperationState &state,
-                  Value lhs, Value rhs) {
-  state.addOperands({lhs, rhs});
 }
 
 #define GET_OP_CLASSES
@@ -72,6 +68,9 @@ void IR1Context::store() {
 
 void IR1Context::transform(IR0Context& IR0Ctx) {
   for (auto &IR : IR0Ctx.IRs) {
+    convertMCInst(IR.Inst);
+  }
+  for (auto &IR : IR0Ctx.IRs) {
     auto op = IR.Inst.getOpcode();
     auto addr = IR.Addr;
     auto loc = Builder.getUnknownLoc();
@@ -82,5 +81,3 @@ void IR1Context::transform(IR0Context& IR0Ctx) {
 void IR1Context::print() {
   Module.dump();
 }
-
-bool translateMCInst(const llvm::MCInst& Inst, mlir::Location Loc);
