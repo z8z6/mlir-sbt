@@ -36,7 +36,7 @@ void X86HeaderGenerator::run(llvm::raw_ostream &OS) const {
     OS << "    Opcode = llvm::X86::" << OpcodeName << ";\n";
     OS << "    MID = &getX86Machine().getMII().get(Opcode);\n";
     OS << "  }\n";
-    OS << "  " << "void op(const llvm::MCInst&) override {};\n";
+    OS << "  " << "void op(ConversionContext&) override {};\n";
     OS << "  static " << ClassName << "& Instance() {\n";
     OS << "    static " << ClassName << " _;\n";
     OS << "    return _;\n";

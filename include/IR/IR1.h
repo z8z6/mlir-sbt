@@ -39,18 +39,17 @@ class IR0Context;
 class IR1Context {
 public:
   mlir::MLIRContext Ctx;
-  mlir::ModuleOp Module; // 持有 MLIR 模块
-  mlir::OpBuilder Builder;            // 用于创建 IR
+  mlir::ModuleOp Module;
+  mlir::OpBuilder Builder;
 
   IR1Context();
-  void transform(IR0Context&);
+  void convert(IR0Context&);
   void print();
   void verify();
 
-private:
-  mlir::Value imm();
-  mlir::Value load();
-  void store();
-
+  static IR1Context& Instance() {
+    static IR1Context instance;
+    return instance;
+  }
 };
 }

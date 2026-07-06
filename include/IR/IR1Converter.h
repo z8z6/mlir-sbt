@@ -5,12 +5,26 @@
 
 #pragma once
 
+#include <vector>
+
 namespace llvm {
 class MCInstrDesc;
 class MCInst;
 }
 
+namespace mlir {
+class Value;
+}
+
 namespace z8 {
+class IR1Context;
+struct ConversionContext {
+  const llvm::MCInst& MI;
+  std::vector<mlir::Value> Src;
+  std::vector<mlir::Value> Dst;
+
+  ConversionContext(const llvm::MCInst&);
+};
 class BaseIR1Converter {
 public:
   const llvm::MCInstrDesc* MID;
@@ -19,10 +33,12 @@ public:
   BaseIR1Converter();
   virtual ~BaseIR1Converter();
 
-  virtual void op(const llvm::MCInst&) = 0;
-  virtual void loadSrcOperand(const llvm::MCInst&);
-  virtual void storeDstOperand(const llvm::MCInst&);
+  virtual void op(ConversionContext&) = 0;
+  virtual void loadSrcOperand(ConversionContext&);
+  virtual void storeDstOperand(ConversionContext&);
   void run(const llvm::MCInst&);
+
+  static IR1Context* Ctx;
 };
 
 void convertMCInst(const llvm::MCInst& MI);

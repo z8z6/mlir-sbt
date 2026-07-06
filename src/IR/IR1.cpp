@@ -37,7 +37,7 @@ IR1Context::IR1Context() : Builder(&Ctx)  {
   Ctx.getOrLoadDialect<memref::MemRefDialect>();
 
   Module = ModuleOp::create(Builder.getUnknownLoc());
-  Builder = OpBuilder(Module.getBody(), Module.getBody()->end());
+  Builder.setInsertionPointToStart(Module.getBody());
 }
 
 void IR1Context::verify() {
@@ -45,36 +45,9 @@ void IR1Context::verify() {
     Module.emitError("module verification error");
 }
 
-
-Value IR1Context::imm() {
-  auto loc = Builder.getUnknownLoc();
-  Type Ty = Builder.getI32Type();
-  return arith::ConstantOp::create(Builder, loc, Ty, Builder.getIntegerAttr(Ty, 1));
-}
-
-Value IR1Context::load() {
-  auto loc = Builder.getUnknownLoc();
-  Value idx = arith::ConstantIndexOp::create(Builder, loc, 5);
-  Value Array;
-  return memref::LoadOp::create(Builder, loc, Array, idx);
-}
-
-void IR1Context::store() {
-  auto loc = Builder.getUnknownLoc();
-  Value idx = arith::ConstantIndexOp::create(Builder, loc, 5);
-  Value Array;
-  memref::StoreOp::create(Builder, loc, Array, idx);
-}
-
-void IR1Context::transform(IR0Context& IR0Ctx) {
+void IR1Context::convert(IR0Context& IR0Ctx) {
   for (auto &IR : IR0Ctx.IRs) {
     convertMCInst(IR.Inst);
-  }
-  for (auto &IR : IR0Ctx.IRs) {
-    auto op = IR.Inst.getOpcode();
-    auto addr = IR.Addr;
-    auto loc = Builder.getUnknownLoc();
-    auto AddOp = arith::AddIOp::create(Builder, loc, imm(), imm());
   }
 }
 
