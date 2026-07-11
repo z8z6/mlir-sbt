@@ -13,15 +13,16 @@ using namespace std;
 void X86ImplGenerator::run(raw_ostream &OS) const {
   emitSourceFileHeader("IR1 X86 Impl Generator",OS);
 
-  OS << "#include <llvm/MC/MCInst.h>\n";
-  OS << "#include <tblgen/X86IR1Converter.h>\n";
-
-  OS << "\n";
-  OS << "using namespace z8;\n";
-  OS << "using namespace llvm;\n";
-  OS << "using namespace llvm::X86;\n\n";
-  OS << "void z8::convertMCInst(const MCInst& MI) {\n";
-  OS << "  switch (MI.getOpcode()) {\n";
+  OS <<
+    "#include <llvm/MC/MCInst.h>\n"
+    "#include <IR/IR0.h>\n"
+    "#include <tblgen/X86IR1Converter.h>\n"
+    "\n"
+    "using namespace z8;\n"
+    "using namespace llvm;\n"
+    "using namespace llvm::X86;\n\n"
+    "void z8::convertMCInst(const IR0& IR) {\n"
+    "  switch (IR.Inst.getOpcode()) {\n";
 
   auto Insts = RK.getAllDerivedDefinitions("X86Inst");
 
@@ -31,13 +32,15 @@ void X86ImplGenerator::run(raw_ostream &OS) const {
 
     string ClassName = "X86_" + OpcodeName.str() + "_IR1Converter";
 
-    OS << "  case " << OpcodeName << ":\n";
-    OS << "    " << ClassName << "::Instance().run(MI);\n";
-    OS << "    break;\n";
+    OS <<
+      "  case " << OpcodeName << ":\n"
+      "    " << ClassName << "::Instance().run(IR);\n"
+      "    break;\n";
   }
-  OS << "  default: break;\n";
-  OS << "  }\n";
-  OS << "}\n";
+  OS <<
+    "  default: break;\n"
+    "  }\n"
+    "}\n";
 }
 
 bool z8::EmitX86Impl(llvm::raw_ostream &OS, const llvm::RecordKeeper &RK) {

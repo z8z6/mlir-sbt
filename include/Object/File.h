@@ -18,7 +18,6 @@ public:
   BaseMachine* Machine;
 
   IR0Context IR0Ctx;
-  IR1Context IR1Ctx;
 
   explicit File(std::string Name);
   void disas();

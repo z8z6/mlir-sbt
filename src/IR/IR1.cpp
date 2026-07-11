@@ -27,6 +27,26 @@ void IR1Dialect::initialize() {
     >();
 }
 
+void ConstIntOp::build(OpBuilder &builder, OperationState &state, int64_t value) {
+  auto dataType = builder.getI64Type();
+  auto dataAttribute = IntegerAttr::get(dataType, value);
+  build(builder, state, dataType, dataAttribute);
+}
+
+void LoadRegOp::build(OpBuilder &builder, OperationState &state, unsigned id) {
+  auto dataType = builder.getI32Type();
+  auto dataAttribute = IntegerAttr::get(dataType, id);
+  build(builder, state, dataType, dataAttribute);
+}
+
+void StoreRegOp::build(OpBuilder &builder, OperationState &state, Value value, unsigned id) {
+  auto dataType = builder.getI32Type();
+  auto dataAttribute = IntegerAttr::get(dataType, id);
+  // 返回值类型为空
+  build(builder, state, TypeRange{}, value, dataAttribute);
+}
+
+
 #define GET_OP_CLASSES
 #include "mlir/IR1Ops.cpp.inc"
 
@@ -47,7 +67,7 @@ void IR1Context::verify() {
 
 void IR1Context::convert(IR0Context& IR0Ctx) {
   for (auto &IR : IR0Ctx.IRs) {
-    convertMCInst(IR.Inst);
+    convertMCInst(IR);
   }
 }
 

@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <string>
 #include <vector>
 
 namespace llvm {
@@ -17,14 +18,16 @@ class Value;
 }
 
 namespace z8 {
+class IR0;
 class IR1Context;
 struct ConversionContext {
-  const llvm::MCInst& MI;
+  const IR0& IR;
   std::vector<mlir::Value> Src;
   std::vector<mlir::Value> Dst;
 
-  ConversionContext(const llvm::MCInst&);
+  ConversionContext(const IR0&);
 };
+
 class BaseIR1Converter {
 public:
   const llvm::MCInstrDesc* MID;
@@ -33,13 +36,14 @@ public:
   BaseIR1Converter();
   virtual ~BaseIR1Converter();
 
+  virtual std::string getName() const = 0;
   virtual void op(ConversionContext&) = 0;
   virtual void loadSrcOperand(ConversionContext&);
   virtual void storeDstOperand(ConversionContext&);
-  void run(const llvm::MCInst&);
+  void run(const IR0&);
 
   static IR1Context* Ctx;
 };
 
-void convertMCInst(const llvm::MCInst& MI);
+void convertMCInst(const IR0& IR);
 }

@@ -15,13 +15,16 @@ using namespace std;
 void X86HeaderGenerator::run(llvm::raw_ostream &OS) const {
   emitSourceFileHeader("IR1 X86 Header Generator",OS);
 
-  OS << "#include <llvm/MC/MCInst.h>\n";
-  OS << "#include <llvm/MC/MCInstrInfo.h>\n";
-  OS << "#include <IR/IR1Converter.h>\n";
-  OS << "#include <Target/X86Machine.h>\n";
-  OS << "#include <Target/X86/MCTargetDesc/X86BaseInfo.h>\n";
-  OS << "\n";
-  OS << "namespace z8 {\n";
+  OS <<
+    "#include <llvm/MC/MCInst.h>\n"
+    "#include <llvm/MC/MCInstrInfo.h>\n"
+    "#include <llvm/Support/Debug.h>\n"
+    "#include <llvm/Support/raw_ostream.h>\n"
+    "#include <IR/IR1Converter.h>\n"
+    "#include <Target/X86Machine.h>\n"
+    "#include <Target/X86/MCTargetDesc/X86BaseInfo.h>\n"
+    "\n"
+    "namespace z8 {\n";
 
   auto Insts = RK.getAllDerivedDefinitions("X86Inst");
 
@@ -30,18 +33,22 @@ void X86HeaderGenerator::run(llvm::raw_ostream &OS) const {
     if (!OpcodeName.starts_with("ADD")) continue;
 
     string ClassName = "X86_" + OpcodeName.str() + "_IR1Converter";
-    OS << "class " << ClassName << " : public BaseIR1Converter {\n";
-    OS << "public:\n";
-    OS << "  " << ClassName << "() {\n";
-    OS << "    Opcode = llvm::X86::" << OpcodeName << ";\n";
-    OS << "    MID = &getX86Machine().getMII().get(Opcode);\n";
-    OS << "  }\n";
-    OS << "  " << "void op(ConversionContext&) override {};\n";
-    OS << "  static " << ClassName << "& Instance() {\n";
-    OS << "    static " << ClassName << " _;\n";
-    OS << "    return _;\n";
-    OS << "  }\n";
-    OS << "};\n\n";
+    OS <<
+      "class " << ClassName << " : public BaseIR1Converter {\n"
+      "public:\n"
+      "  " << ClassName << "() {\n"
+      "    Opcode = llvm::X86::" << OpcodeName << ";\n"
+      "    MID = &getX86Machine().getMII().get(Opcode);\n"
+      "  }\n"
+      "  std::string getName() const override { return \"" << OpcodeName << "\"; };\n"
+      "  void op(ConversionContext&) override { \n"
+      "    llvm::dbgs() << getName() << \" converter is not impl yet!\\n\"; \n"
+      "  };\n"
+      "  static " << ClassName << "& Instance() {\n"
+      "    static " << ClassName << " _;\n"
+      "    return _;\n"
+      "  }\n"
+      "};\n\n";
   }
 
   OS << "}\n";

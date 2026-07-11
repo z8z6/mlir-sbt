@@ -14,10 +14,12 @@
 
 #include "llvm/MC/MCInstrInfo.h"
 
+#include <IR/IR0.h>
+
 using namespace llvm;
 using namespace z8;
 
-ConversionContext::ConversionContext(const llvm::MCInst &MI) : MI(MI){}
+ConversionContext::ConversionContext(const IR0 &IR) : IR(IR){}
 
 IR1Context* BaseIR1Converter::Ctx = &IR1Context::Instance();
 
@@ -27,20 +29,17 @@ BaseIR1Converter::BaseIR1Converter() {
 BaseIR1Converter::~BaseIR1Converter() {}
 
 void z8::BaseIR1Converter::loadSrcOperand(ConversionContext& CC) {
-  for (int i = 0; i < CC.MI.getNumOperands(); ++i) {
-    const MCOperand &Op = CC.MI.getOperand(i);
+  for (int i = 0; i < CC.IR.Inst.getNumOperands(); ++i) {
+    const MCOperand &Op = CC.IR.Inst.getOperand(i);
     if (i < MID->getNumDefs()) continue;
 
     static auto loc = Ctx->Builder.getUnknownLoc();
     if (Op.isImm()) {
-      auto imm = Ctx->Builder.getI32IntegerAttr(Op.getImm());
-      auto ci = ir1::ConstIntOp::create(Ctx->Builder, loc, imm);
+      auto ci = ir1::ConstIntOp::create(Ctx->Builder, loc, Op.getImm());
       CC.Src.push_back(ci);
     }
     if (Op.isReg()) {
-      auto id = Ctx->Builder.getI32IntegerAttr(Op.getReg());
-      auto ci = ir1::ConstIntOp::create(Ctx->Builder, loc, id);
-      auto v = ir1::LoadRegOp::create(Ctx->Builder, loc, ci.getType(), ci);
+      auto v = ir1::LoadRegOp::create(Ctx->Builder, loc, Op.getReg());
       CC.Src.push_back(v);
     }
   }
@@ -48,19 +47,17 @@ void z8::BaseIR1Converter::loadSrcOperand(ConversionContext& CC) {
 
 void z8::BaseIR1Converter::storeDstOperand(ConversionContext& CC) {
   for (int i = 0; i < MID->getNumDefs(); ++i) {
-    const MCOperand &Op = CC.MI.getOperand(i);
+    const MCOperand &Op = CC.IR.Inst.getOperand(i);
     if (!Op.isReg()) continue;
 
     static auto loc = Ctx->Builder.getUnknownLoc();
-    auto id = Ctx->Builder.getI32IntegerAttr(Op.getReg());
-    auto ci = ir1::ConstIntOp::create(Ctx->Builder, loc, id);
     if (i >= CC.Dst.size()) continue;
-    ir1::StoreRegOp::create(Ctx->Builder, loc, CC.Dst[i], ci);
+    ir1::StoreRegOp::create(Ctx->Builder, loc, CC.Dst[i], Op.getReg());
   }
 }
 
-void BaseIR1Converter::run(const MCInst& MI) {
-  ConversionContext CC(MI);
+void BaseIR1Converter::run(const IR0& IR) {
+  ConversionContext CC(IR);
   loadSrcOperand(CC);
   op(CC);
   storeDstOperand(CC);

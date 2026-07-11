@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.31)
 project(sbt)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # 1. LLVM 相关配置
 # 获取 LLVM 和 MLIR 的位置

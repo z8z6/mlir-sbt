@@ -21,31 +21,34 @@ class IR1_Op<string mnemonic, list<Trait> traits = []> :
 
 def ConstIntOp : IR1_Op<"ci"> {
   let arguments = (ins AnyAttr:$value);
-  let results = (outs AnyInteger);
+  let results = (outs AnyInteger:$res);
   let builders = [
-    OpBuilder<(ins "mlir::IntegerAttr":$value), [{
-      return build($_builder, $_state, value.getType(), value);
-    }]>
+    OpBuilder<(ins "int64_t":$value)>
   ];
+  let assemblyFormat = "attr-dict `:` type($res)";
 }
 
 def ConstFloatOp : IR1_Op<"cf"> {
   let arguments = (ins AnyAttr:$value);
-  let results = (outs AnyFloat);
+  let results = (outs AnyFloat:$res);
+  let assemblyFormat = "attr-dict `:` type($res)";
+}
+
+def LoadRegOp : IR1_Op<"load_reg"> {
+  let arguments = (ins AnyAttr:$reg_id);
+  let results = (outs AnyType:$res);
   let builders = [
-    OpBuilder<(ins "mlir::FloatAttr":$value), [{
-      return build($_builder, $_state, value.getType(), value);
-    }]>
+    OpBuilder<(ins "unsigned":$reg_id)>
   ];
+  let assemblyFormat = "attr-dict `:` type($res)";
 }
 
-def LoadRegOp : IR1_Op<"lr"> {
-  let arguments = (ins AnyInteger:$reg_id);
-  let results = (outs AnyType);
-}
-
-def StoreRegOp : IR1_Op<"sr"> {
-  let arguments = (ins AnyType:$value, AnyInteger:$reg_id);
+def StoreRegOp : IR1_Op<"store_reg"> {
+  let arguments = (ins AnyType:$value, AnyAttr:$reg_id);
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$value, "unsigned":$reg_id)>
+  ];
+  let assemblyFormat = "attr-dict $value `:` type($value)";
 }
 
 def AddIOp : IR1_Op<"addi"> {
