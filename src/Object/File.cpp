@@ -18,6 +18,7 @@ File::File(std::string Name) : Name(Name) {
   OB = unwrapOrError(ObjectFile::createObjectFile(Name));
   O = OB.getBinary();
   Machine = &getMachine(O->makeTriple());
+  CurrentFile = this;
 }
 
 

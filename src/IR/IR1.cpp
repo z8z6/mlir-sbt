@@ -71,6 +71,9 @@ void IR1Context::convert(IR0Context& IR0Ctx) {
   }
 }
 
-void IR1Context::print() {
-  Module.dump();
+void IR1Context::print(bool withLoc) {
+  OpPrintingFlags flags;
+  flags.enableDebugInfo(withLoc);
+  Module->print(dbgs(), flags);
 }
+

@@ -21,6 +21,8 @@ public:
 
   explicit File(std::string Name);
   void disas();
+
+  inline static File* CurrentFile = nullptr;
 };
 }
 

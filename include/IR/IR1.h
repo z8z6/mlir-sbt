@@ -44,7 +44,7 @@ public:
 
   IR1Context();
   void convert(IR0Context&);
-  void print();
+  void print(bool withLoc = false);
   void verify();
 
   static IR1Context& Instance() {

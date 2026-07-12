@@ -23,13 +23,14 @@ public:
 
   IR0(llvm::MCInst inst, uint64_t addr);
 
-  void print(BaseMachine* M, llvm::raw_ostream& out = llvm::outs()) const;
+  void print(llvm::raw_ostream& out = llvm::outs()) const;
+  std::string str() const ;
 };
 
 class IR0Context {
 public:
   std::vector<IR0> IRs;
 
-  void print(BaseMachine*);
+  void print() const;
 };
 };

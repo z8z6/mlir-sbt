@@ -17,9 +17,16 @@
 #include <IR/IR0.h>
 
 using namespace llvm;
+using namespace mlir;
 using namespace z8;
 
 ConversionContext::ConversionContext(const IR0 &IR) : IR(IR){}
+
+NameLoc ConversionContext::getNameLoc() const {
+  static IR1Context* Ctx = &IR1Context::Instance();
+  auto name = StringAttr::get(&Ctx->Ctx, IR.str());
+  return NameLoc::get(name);
+}
 
 IR1Context* BaseIR1Converter::Ctx = &IR1Context::Instance();
 
@@ -33,7 +40,7 @@ void z8::BaseIR1Converter::loadSrcOperand(ConversionContext& CC) {
     const MCOperand &Op = CC.IR.Inst.getOperand(i);
     if (i < MID->getNumDefs()) continue;
 
-    static auto loc = Ctx->Builder.getUnknownLoc();
+    auto loc = CC.getNameLoc();
     if (Op.isImm()) {
       auto ci = ir1::ConstIntOp::create(Ctx->Builder, loc, Op.getImm());
       CC.Src.push_back(ci);
@@ -50,7 +57,7 @@ void z8::BaseIR1Converter::storeDstOperand(ConversionContext& CC) {
     const MCOperand &Op = CC.IR.Inst.getOperand(i);
     if (!Op.isReg()) continue;
 
-    static auto loc = Ctx->Builder.getUnknownLoc();
+    auto loc = CC.getNameLoc();
     if (i >= CC.Dst.size()) continue;
     ir1::StoreRegOp::create(Ctx->Builder, loc, CC.Dst[i], Op.getReg());
   }

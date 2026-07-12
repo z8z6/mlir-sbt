@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include "mlir/IR/Location.h"
+
 #include <string>
 #include <vector>
 
@@ -26,6 +28,7 @@ struct ConversionContext {
   std::vector<mlir::Value> Dst;
 
   ConversionContext(const IR0&);
+  mlir::NameLoc getNameLoc() const;
 };
 
 class BaseIR1Converter {
