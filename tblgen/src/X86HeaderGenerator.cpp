@@ -16,7 +16,7 @@ void X86HeaderGenerator::run(llvm::raw_ostream &OS) const {
   emitSourceFileHeader("IR1 X86 Header Generator",OS);
 
   OS <<
-    "#include <llvm/MC/MCInst.h>\n"
+    "#pragma once\n\n"
     "#include <llvm/MC/MCInstrInfo.h>\n"
     "#include <llvm/Support/Debug.h>\n"
     "#include <llvm/Support/raw_ostream.h>\n"
@@ -40,10 +40,8 @@ void X86HeaderGenerator::run(llvm::raw_ostream &OS) const {
       "    Opcode = llvm::X86::" << OpcodeName << ";\n"
       "    MID = &getX86Machine().getMII().get(Opcode);\n"
       "  }\n"
-      "  std::string getName() const override { return \"" << OpcodeName << "\"; };\n"
-      "  void op(ConversionContext&) override { \n"
-      "    llvm::dbgs() << getName() << \" converter is not impl yet!\\n\"; \n"
-      "  };\n"
+      "  std::string getName() const override { return \"" << OpcodeName << "\"; }\n"
+      "  // void op(ConversionContext&) override; \n"
       "  static " << ClassName << "& Instance() {\n"
       "    static " << ClassName << " _;\n"
       "    return _;\n"

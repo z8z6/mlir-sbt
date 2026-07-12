@@ -3,18 +3,11 @@
 // Part of RVision
 //
 #include "IR/IR1Converter.h"
-
 #include "IR/IR1.h"
-
+#include <IR/IR0.h>
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrDesc.h"
-#include <Target/X86/MCTargetDesc/X86BaseInfo.h>
-
-#include "Target/X86Machine.h"
-
-#include "llvm/MC/MCInstrInfo.h"
-
-#include <IR/IR0.h>
+#include "llvm/Support/Debug.h"
 
 using namespace llvm;
 using namespace mlir;
@@ -34,6 +27,10 @@ BaseIR1Converter::BaseIR1Converter() {
 }
 
 BaseIR1Converter::~BaseIR1Converter() {}
+
+void BaseIR1Converter::op(ConversionContext &) {
+  dbgs() << getName() << " converter is not impl yet!\n";
+}
 
 void z8::BaseIR1Converter::loadSrcOperand(ConversionContext& CC) {
   for (int i = 0; i < CC.IR.Inst.getNumOperands(); ++i) {

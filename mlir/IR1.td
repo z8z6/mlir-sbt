@@ -53,7 +53,8 @@ def StoreRegOp : IR1_Op<"store_reg"> {
 
 def AddIOp : IR1_Op<"addi"> {
   let arguments = (ins AnyInteger:$lhs, AnyInteger:$rhs);
-  let results = (outs AnyInteger);
+  let results = (outs AnyInteger:$res);
+  let assemblyFormat = "attr-dict `(`$lhs `:` type($lhs)`,` $rhs `:` type($rhs)`)` `:` type($res)";
 }
 
 def AddFOp : IR1_Op<"addf"> {

@@ -40,7 +40,7 @@ public:
   virtual ~BaseIR1Converter();
 
   virtual std::string getName() const = 0;
-  virtual void op(ConversionContext&) = 0;
+  virtual void op(ConversionContext&);
   virtual void loadSrcOperand(ConversionContext&);
   virtual void storeDstOperand(ConversionContext&);
   void run(const IR0&);
