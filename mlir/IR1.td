@@ -51,6 +51,15 @@ def StoreRegOp : IR1_Op<"store_reg"> {
   let assemblyFormat = "attr-dict $value `:` type($value)";
 }
 
+def LoadOp : IR1_Op<"load"> {
+  let arguments = (ins AnyInteger:$addr);
+  let results = (outs AnyType:$res);
+}
+
+def StoreOp : IR1_Op<"store"> {
+  let arguments = (ins AnyType:$value, AnyInteger:$addr);
+}
+
 def AddIOp : IR1_Op<"addi"> {
   let arguments = (ins AnyInteger:$lhs, AnyInteger:$rhs);
   let results = (outs AnyInteger:$res);
@@ -59,7 +68,32 @@ def AddIOp : IR1_Op<"addi"> {
 
 def AddFOp : IR1_Op<"addf"> {
   let arguments = (ins AnyFloat:$lhs, AnyFloat:$rhs);
-  let results = (outs AnyFloat);
+  let results = (outs AnyFloat:$res);
+  let assemblyFormat = "attr-dict `(`$lhs `:` type($lhs)`,` $rhs `:` type($rhs)`)` `:` type($res)";
+}
+
+def MulIOp : IR1_Op<"muli"> {
+  let arguments = (ins AnyInteger:$lhs, AnyInteger:$rhs);
+  let results = (outs AnyInteger:$res);
+  let assemblyFormat = "attr-dict `(`$lhs `:` type($lhs)`,` $rhs `:` type($rhs)`)` `:` type($res)";
+}
+
+def MulFOp : IR1_Op<"mulf"> {
+  let arguments = (ins AnyFloat:$lhs, AnyFloat:$rhs);
+  let results = (outs AnyFloat:$res);
+  let assemblyFormat = "attr-dict `(`$lhs `:` type($lhs)`,` $rhs `:` type($rhs)`)` `:` type($res)";
+}
+
+def DivIOp : IR1_Op<"divi"> {
+  let arguments = (ins AnyInteger:$lhs, AnyInteger:$rhs);
+  let results = (outs AnyInteger:$res);
+  let assemblyFormat = "attr-dict `(`$lhs `:` type($lhs)`,` $rhs `:` type($rhs)`)` `:` type($res)";
+}
+
+def DivFOp : IR1_Op<"divf"> {
+  let arguments = (ins AnyFloat:$lhs, AnyFloat:$rhs);
+  let results = (outs AnyFloat:$res);
+  let assemblyFormat = "attr-dict `(`$lhs `:` type($lhs)`,` $rhs `:` type($rhs)`)` `:` type($res)";
 }
 
 def MovOp : IR1_Op<"mov"> {

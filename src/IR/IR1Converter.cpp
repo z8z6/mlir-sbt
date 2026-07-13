@@ -23,8 +23,7 @@ NameLoc ConversionContext::getNameLoc() const {
 
 IR1Context* BaseIR1Converter::Ctx = &IR1Context::Instance();
 
-BaseIR1Converter::BaseIR1Converter() {
-}
+BaseIR1Converter::BaseIR1Converter() {}
 
 BaseIR1Converter::~BaseIR1Converter() {}
 
@@ -62,6 +61,7 @@ void z8::BaseIR1Converter::storeDstOperand(ConversionContext& CC) {
 
 void BaseIR1Converter::run(const IR0& IR) {
   ConversionContext CC(IR);
+  IR.Inst.dump();
   loadSrcOperand(CC);
   op(CC);
   storeDstOperand(CC);

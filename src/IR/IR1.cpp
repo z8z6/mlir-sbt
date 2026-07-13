@@ -65,6 +65,10 @@ void IR1Context::verify() {
     Module.emitError("module verification error");
 }
 
+Type IR1Context::iTy(int width, IntegerType::SignednessSemantics signedness) {
+  return IntegerType::get(&Ctx, width, signedness);
+}
+
 void IR1Context::convert(IR0Context& IR0Ctx) {
   for (auto &IR : IR0Ctx.IRs) {
     convertMCInst(IR);

@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "mlir/Bytecode/BytecodeOpInterface.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/Builders.h"
@@ -46,6 +46,7 @@ public:
   void convert(IR0Context&);
   void print(bool withLoc = false);
   void verify();
+  mlir::Type iTy(int width = 64, mlir::IntegerType::SignednessSemantics signedness = mlir::IntegerType::Signless);
 
   static IR1Context& Instance() {
     static IR1Context instance;
