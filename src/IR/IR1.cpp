@@ -5,8 +5,10 @@
 #include "IR/IR1.h"
 #include "IR/IR0.h"
 #include "IR/IR1Converter.h"
+#include "Pass/IR1Lowering.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Transforms/Passes.h"
 
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/MLIRContext.h"
@@ -63,6 +65,12 @@ IR1Context::IR1Context() : Builder(&Ctx)  {
 void IR1Context::verify() {
   if (failed(mlir::verify(Module)))
     Module.emitError("module verification error");
+}
+
+void IR1Context::lower() {
+  PassManager PM(Module->getName());
+  PM.addPass(createIR1LowerPass());
+  auto r = PM.run(Module);
 }
 
 Type IR1Context::iTy(int width, IntegerType::SignednessSemantics signedness) {

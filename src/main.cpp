@@ -19,6 +19,8 @@ int main(int argc, char** argv) {
   F.IR0Ctx.print();
   IR1Context::Instance().convert(F.IR0Ctx);
   IR1Context::Instance().print(true);
+  IR1Context::Instance().lower();
+  IR1Context::Instance().print(true);
 
   return 0;
 }

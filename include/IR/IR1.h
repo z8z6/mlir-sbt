@@ -13,7 +13,7 @@
 #include "mlir/IR/OwningOpRef.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/Interfaces/CallInterfaces.h"
+
 #include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
@@ -46,6 +46,7 @@ public:
   void convert(IR0Context&);
   void print(bool withLoc = false);
   void verify();
+  void lower();
   mlir::Type iTy(int width = 64, mlir::IntegerType::SignednessSemantics signedness = mlir::IntegerType::Signless);
 
   static IR1Context& Instance() {
