@@ -66,6 +66,12 @@ def AddIOp : IR1_Op<"addi"> {
   let assemblyFormat = "attr-dict `(`$lhs `:` type($lhs)`,` $rhs `:` type($rhs)`)` `:` type($res)";
 }
 
+def X86AddIOp : IR1_Op<"x86_addi"> {
+  let arguments = (ins AnyInteger:$lhs, AnyInteger:$rhs);
+  let results = (outs AnyInteger:$res, I64:$flags);
+  let assemblyFormat = "attr-dict `(`$lhs `:` type($lhs)`,` $rhs `:` type($rhs)`)` `:` type($res)";
+}
+
 def AddFOp : IR1_Op<"addf"> {
   let arguments = (ins AnyFloat:$lhs, AnyFloat:$rhs);
   let results = (outs AnyFloat:$res);

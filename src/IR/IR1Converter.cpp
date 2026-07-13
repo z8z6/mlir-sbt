@@ -49,13 +49,16 @@ void z8::BaseIR1Converter::loadSrcOperand(ConversionContext& CC) {
 }
 
 void z8::BaseIR1Converter::storeDstOperand(ConversionContext& CC) {
-  for (int i = 0; i < MID->getNumDefs(); ++i) {
+  auto loc = CC.getNameLoc();
+  for (unsigned i = 0; i < MID->getNumDefs(); ++i) {
     const MCOperand &Op = CC.IR.Inst.getOperand(i);
     if (!Op.isReg()) continue;
-
-    auto loc = CC.getNameLoc();
-    if (i >= CC.Dst.size()) continue;
+    assert (i < CC.Dst.size());
     ir1::StoreRegOp::create(Ctx->Builder, loc, CC.Dst[i], Op.getReg());
+  }
+  for (unsigned i = 0; i < CC.ImplicitOperand.size(); ++i) {
+    auto reg = CC.ImplicitOperand[i];
+    ir1::StoreRegOp::create(Ctx->Builder, loc, CC.ImplicitDst[i], reg);
   }
 }
 

@@ -7,6 +7,8 @@
 
 #include "mlir/IR/Location.h"
 
+#include "llvm/MC/MCInst.h"
+
 #include <string>
 #include <vector>
 
@@ -26,6 +28,8 @@ struct ConversionContext {
   const IR0& IR;
   std::vector<mlir::Value> Src;
   std::vector<mlir::Value> Dst;
+  std::vector<mlir::Value> ImplicitDst;
+  std::vector<llvm::MCRegister> ImplicitOperand;
 
   ConversionContext(const IR0&);
   mlir::NameLoc getNameLoc() const;

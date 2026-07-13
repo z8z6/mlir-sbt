@@ -15,11 +15,13 @@ void AddOp(ConversionContext& CC, int width, IntegerType::SignednessSemantics si
   assert(CC.Src.size() >= 2);
   static IR1Context* Ctx = &IR1Context::Instance();
   auto loc = CC.getNameLoc();
-  auto type = Ctx->iTy(width, signedness);
-  Value v;
+  auto resTy = Ctx->iTy(width, signedness);
+  auto i64 = Ctx->iTy();
+  TypeRange type = {resTy, i64};
+  ir1::X86AddIOp op;
   switch (CC.Src.size()) {
     case 2: {
-      v = ir1::AddIOp::create(Ctx->Builder, loc, type, CC.Src[0], CC.Src[1]);
+      op = ir1::X86AddIOp::create(Ctx->Builder, loc, type, CC.Src[0], CC.Src[1]);
       break;
     }
     // addl fs:8(%rbx,%rsi,4), %eax
@@ -31,14 +33,16 @@ void AddOp(ConversionContext& CC, int width, IntegerType::SignednessSemantics si
       auto t1 = ir1::AddIOp::create(Ctx->Builder, loc, i64, CC.Src[1], t0);
       auto t2 = ir1::AddIOp::create(Ctx->Builder, loc, i64, CC.Src[4], t1);
       auto t3 = ir1::AddIOp::create(Ctx->Builder, loc, i64, CC.Src[5], t2);
-      auto t4 = ir1::LoadOp::create(Ctx->Builder, loc, type, t3);
-      v = ir1::AddIOp::create(Ctx->Builder, loc, type, CC.Src[0],t4);
+      auto t4 = ir1::LoadOp::create(Ctx->Builder, loc, i64, t3);
+      op = ir1::X86AddIOp::create(Ctx->Builder, loc, type, CC.Src[0],t4);
       break;
     }
     default:
       assert(false);
   }
-  CC.Dst.push_back(v);
+  CC.Dst.push_back(op.getRes());
+  CC.ImplicitDst.push_back(op.getFlags());
+  CC.ImplicitOperand.emplace_back(llvm::X86::RFLAGS);
 }
 }
 
