@@ -5,24 +5,25 @@
 #include "IR/IR1.h"
 #include "IR/IR0.h"
 #include "IR/IR1Converter.h"
+#include "IR/X86.h"
 #include "Pass/IR1Lowering.h"
-#include "Target/X86Register.h"
+#include "Pass/X86Lowering.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
+#include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/Passes.h"
 
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Verifier.h"
-#include "mlir/IR/Diagnostics.h"
 
-#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/CodeGen.h"
@@ -43,39 +44,22 @@ void IR1Dialect::initialize() {
   addOperations<
 #define GET_OP_LIST
 #include "mlir/IR1Ops.cpp.inc"
-    >();
+      >();
 }
 
-void ConstIntOp::build(OpBuilder &builder, OperationState &state, int64_t value) {
+void ConstIntOp::build(OpBuilder &builder, OperationState &state,
+                       int64_t value) {
   auto dataType = builder.getI64Type();
   auto dataAttribute = IntegerAttr::get(dataType, value);
   build(builder, state, dataType, dataAttribute);
 }
 
-void LoadRegOp::build(OpBuilder &builder, OperationState &state,
-                      mlir::Value registerState, unsigned id) {
-  auto reg = z8::getX86RegisterDesc(id);
-  assert(reg && "unsupported x86 register");
-  auto dataType = builder.getIntegerType(reg->width);
-  auto dataAttribute = IntegerAttr::get(dataType, id);
-  build(builder, state, dataType, registerState, dataAttribute);
-}
-
-void StoreRegOp::build(OpBuilder &builder, OperationState &state,
-                       mlir::Value registerState, mlir::Value value,
-                       unsigned id) {
-  auto dataType = builder.getI32Type();
-  auto dataAttribute = IntegerAttr::get(dataType, id);
-  build(builder, state, TypeRange{}, registerState, value, dataAttribute);
-}
-
-
 #define GET_OP_CLASSES
 #include "mlir/IR1Ops.cpp.inc"
 
-
-IR1Context::IR1Context() : Builder(&Ctx)  {
+IR1Context::IR1Context() : Builder(&Ctx) {
   Ctx.getOrLoadDialect<IR1Dialect>();
+  Ctx.getOrLoadDialect<x86ir::X86Dialect>();
   Ctx.getOrLoadDialect<arith::ArithDialect>();
   Ctx.getOrLoadDialect<func::FuncDialect>();
   Ctx.getOrLoadDialect<LLVM::LLVMDialect>();
@@ -105,6 +89,7 @@ LogicalResult IR1Context::lower() {
   if (failed(mlir::verify(Module)))
     return failure();
   mlir::PassManager PM(Module->getName());
+  PM.addPass(createX86LowerPass());
   PM.addPass(createIR1LowerPass());
   if (failed(PM.run(Module)))
     return failure();
@@ -112,7 +97,8 @@ LogicalResult IR1Context::lower() {
 }
 
 LogicalResult IR1Context::emitObject(StringRef outputPath) {
-  if (llvm::InitializeNativeTarget() || llvm::InitializeNativeTargetAsmPrinter())
+  if (llvm::InitializeNativeTarget() ||
+      llvm::InitializeNativeTargetAsmPrinter())
     return Module.emitError("cannot initialize native LLVM target");
   llvm::LLVMContext llvmContext;
   std::unique_ptr<llvm::Module> llvmModule =
@@ -143,20 +129,20 @@ LogicalResult IR1Context::emitObject(StringRef outputPath) {
     return Module.emitError("cannot open output file: ") << ec.message();
 
   llvm::legacy::PassManager passes;
-  if (targetMachine->addPassesToEmitFile(
-          passes, output, nullptr, llvm::CodeGenFileType::ObjectFile))
+  if (targetMachine->addPassesToEmitFile(passes, output, nullptr,
+                                         llvm::CodeGenFileType::ObjectFile))
     return Module.emitError("target cannot emit an object file");
   passes.run(*llvmModule);
   output.flush();
   return success();
 }
 
-mlir::Type IR1Context::iTy(
-    int width, mlir::IntegerType::SignednessSemantics signedness) {
+mlir::Type IR1Context::iTy(int width,
+                           mlir::IntegerType::SignednessSemantics signedness) {
   return mlir::IntegerType::get(&Ctx, width, signedness);
 }
 
-LogicalResult IR1Context::convert(IR0Context& IR0Ctx) {
+LogicalResult IR1Context::convert(IR0Context &IR0Ctx) {
   ConversionFailed = false;
   for (auto &IR : IR0Ctx.IRs) {
     convertMCInst(IR);

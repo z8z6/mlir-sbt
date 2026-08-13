@@ -36,6 +36,7 @@ x86 → x86 并非多余步骤：它可以隔离跨架构指令选择问题，�
       → BaseIR1Converter::run
       → loadSrcOperand / op / storeDstOperand
   → IR1Context::lower
+      → X86LoweringPass
       → IR1LoweringPass
       → LLVM Dialect
   → IR1Context::emitObject
@@ -52,10 +53,13 @@ x86 → x86 并非多余步骤：它可以隔离跨架构指令选择问题，�
 | 对象文件 | `include/Object`, `src/Object` | 打开目标文件、遍历代码 section |
 | 目标机抽象 | `include/Target`, `src/Target` | 初始化 LLVM x86 MC 组件，提供反汇编器和指令描述 |
 | IR0 | `include/IR/IR0.h`, `src/IR/IR0.cpp` | 保存地址与 `MCInst`，打印汇编文本 |
-| IR1 Dialect | `mlir/IR1.td`, `include/IR/IR1.h` | 定义并注册自定义 MLIR 操作 |
-| 指令提升 | `src/IR/IR1Converter.cpp`, `src/IR/IR1ArithConverter.cpp` | 读取显式操作数，将部分 ADD 提升到 IR1 |
+| X86 Dialect | `mlir/X86.td`, `include/IR/X86.h` | 封装 flags、legacy XMM 等 x86 特有语义 |
+| IR1 Dialect | `mlir/IR1.td`, `include/IR/IR1.h` | 定义架构通用基础计算与状态操作 |
+| 指令提升框架 | `src/IR/IR1Converter.cpp` | 统一读取显式操作数并写回结果 |
+| x86 指令翻译 | `src/Trans/X86/` | 按指令名组织翻译函数，并复用寻址、操作数与架构状态辅助逻辑 |
 | 转换器生成 | `tblgen/` | 从 LLVM x86 TableGen 记录生成转换器类及 opcode switch |
-| 降级 Pass | `src/Pass/IR1Lowering.cpp` | 将当前寄存器状态、整数运算、内存访问和 ADD flags 降到 LLVM Dialect |
+| X86 降级 Pass | `src/Pass/X86Lowering.cpp` | 将 x86 flags 和 scalar FP 语义展开成 IR1 基础操作 |
+| IR1 降级 Pass | `src/Pass/IR1Lowering.cpp` | 将通用状态、计算和内存操作降到标准/LLVM Dialect |
 | 目标发射 | `src/IR/IR1.cpp` | 翻译到 LLVM IR，并通过宿主 TargetMachine 发射目标文件 |
 
 ### 2.3 已验证的范围
@@ -73,8 +77,9 @@ x86 → x86 并非多余步骤：它可以隔离跨架构指令选择问题，�
 - 完全没有进入生成 switch 的 opcode 尚缺少统一的 unsupported 诊断；
 - 反汇编失败时跳过一个字节，没有记录 gap 或终止当前基本块；
 - 所有代码 section 被线性扫描，没有函数、符号、重定位和 CFG；
-- 当前 state ABI 只覆盖 GPR 与 RFLAGS，RIP、段状态、异常和程序级控制流尚未
-  进入 translated block ABI；
+- 当前 state ABI 覆盖 GPR、RFLAGS 与 XMM0-XMM15；RIP、段状态、异常和程序级
+  控制流尚未进入 translated block ABI。每个 XMM 寄存器作为两个连续的 64 位槽建模，
+  但 MXCSR、YMM/ZMM 和浮点异常状态尚未进入 ABI；
 - `lock add` 的现有 fixture 只验证单线程结果，尚未验证翻译产物的并发原子性。
 
 ## 3. 目标架构
@@ -115,7 +120,7 @@ IR0 是机器指令层的事实记录，不承担优化，也不应该丢失重�
 
 第一阶段可以只接受无间接跳转的输入，但必须遇到不支持情况时失败，而不是继续产生缺失代码的结果。
 
-### 3.4 语义提升到 IR1
+### 3.4 语义提升到 X86 Dialect 与 IR1
 
 每条源指令应被转换为：
 
@@ -123,7 +128,7 @@ IR0 是机器指令层的事实记录，不承担优化，也不应该丢失重�
 读架构状态 → 基础计算/访存 → 写架构状态 → 控制流或异常效果
 ```
 
-转换器负责 x86 编码细节，IR1 负责表达规范化语义。转换过程应由“指令 schema + 少量手写语义模板”驱动：TableGen 可生成 opcode 分类、操作数角色和分派，复杂语义仍由可测试的 C++ lowering 实现。
+转换器负责 x86 编码细节。具有 flags、隐式寄存器或 legacy XMM 行为的操作先进入 X86 Dialect；无架构特征的值搬运和状态访问可直接进入 IR1。X86 降级 Pass 负责把特殊语义展开为 IR1 通用操作。转换过程应由“指令 schema + 少量手写语义模板”驱动：TableGen 可生成 opcode 分类、操作数角色和分派，复杂语义仍由可测试的 C++ lowering 实现。
 
 ### 3.5 规范化与优化
 
@@ -142,7 +147,8 @@ IR0 是机器指令层的事实记录，不承担优化，也不应该丢失重�
 推荐路径：
 
 ```text
-IR1
+X86 Dialect（flags、隐式状态、legacy XMM 等源架构语义）
+  → IR1（架构通用基础操作）
   → arith / cf / func / LLVM Dialect
   → mlir-translate 或 translateModuleToLLVMIR
   → llvm::Module

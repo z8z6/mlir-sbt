@@ -1,7 +1,6 @@
 #include "Pass/IR1Lowering.h"
 
 #include "IR/IR1.h"
-#include "Target/X86Register.h"
 
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
@@ -27,6 +26,11 @@ Value integerConstant(OpBuilder &builder, Location loc, IntegerType type,
                                             /*implicitTrunc=*/true));
 }
 
+Value integerConstant(OpBuilder &builder, Location loc, IntegerType type,
+                      const APInt &value) {
+  return arith::ConstantIntOp::create(builder, loc, type, value);
+}
+
 Value castInteger(PatternRewriter &rewriter, Location loc, Value value,
                   IntegerType targetType) {
   auto sourceType = cast<IntegerType>(value.getType());
@@ -38,22 +42,12 @@ Value castInteger(PatternRewriter &rewriter, Location loc, Value value,
 }
 
 Value stateSlotPointer(PatternRewriter &rewriter, Location loc, Value state,
-                       X86RegisterSlot slot) {
+                       unsigned slot) {
   auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
   auto i64Type = rewriter.getI64Type();
   return LLVM::GEPOp::create(
       rewriter, loc, ptrType, i64Type, state,
       ArrayRef<LLVM::GEPArg>{static_cast<int32_t>(slot)});
-}
-
-Value packFlag(PatternRewriter &rewriter, Location loc, Value flag,
-               unsigned bit) {
-  auto i64Type = rewriter.getI64Type();
-  Value wide = arith::ExtUIOp::create(rewriter, loc, i64Type, flag);
-  if (bit == 0)
-    return wide;
-  return arith::ShLIOp::create(rewriter, loc, wide,
-                               integerConstant(rewriter, loc, i64Type, bit));
 }
 
 struct ConstIntOpLowering : public OpConversionPattern<ir1::ConstIntOp> {
@@ -65,29 +59,26 @@ struct ConstIntOpLowering : public OpConversionPattern<ir1::ConstIntOp> {
     auto value = cast<IntegerAttr>(op.getValue());
     auto type = cast<IntegerType>(op.getType());
     rewriter.replaceOpWithNewOp<arith::ConstantIntOp>(op, type,
-                                                       value.getValue());
+                                                      value.getValue());
     return success();
   }
 };
 
-struct LoadRegOpLowering : public OpConversionPattern<ir1::LoadRegOp> {
+struct LoadStateOpLowering : public OpConversionPattern<ir1::LoadStateOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(ir1::LoadRegOp op, OpAdaptor adaptor,
+  matchAndRewrite(ir1::LoadStateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    auto reg = getX86RegisterDesc(cast<IntegerAttr>(op.getRegId()).getInt());
-    if (!reg)
-      return rewriter.notifyMatchFailure(op, "unsupported x86 register");
-
     Location loc = op.getLoc();
-    auto i64Type = rewriter.getI64Type();
-    Value ptr = stateSlotPointer(rewriter, loc, adaptor.getState(), reg->slot);
-    Value value = LLVM::LoadOp::create(rewriter, loc, i64Type, ptr, 8);
-    if (reg->bitOffset != 0)
+    auto storageType = rewriter.getIntegerType(op.getStorageWidth());
+    Value ptr =
+        stateSlotPointer(rewriter, loc, adaptor.getState(), op.getSlot());
+    Value value = LLVM::LoadOp::create(rewriter, loc, storageType, ptr, 8);
+    if (op.getBitOffset() != 0)
       value = arith::ShRUIOp::create(
           rewriter, loc, value,
-          integerConstant(rewriter, loc, i64Type, reg->bitOffset));
+          integerConstant(rewriter, loc, storageType, op.getBitOffset()));
     auto resultType = cast<IntegerType>(op.getType());
     value = castInteger(rewriter, loc, value, resultType);
     rewriter.replaceOp(op, value);
@@ -95,46 +86,29 @@ struct LoadRegOpLowering : public OpConversionPattern<ir1::LoadRegOp> {
   }
 };
 
-struct StoreRegOpLowering : public OpConversionPattern<ir1::StoreRegOp> {
+struct StoreStateOpLowering : public OpConversionPattern<ir1::StoreStateOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(ir1::StoreRegOp op, OpAdaptor adaptor,
+  matchAndRewrite(ir1::StoreStateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    auto reg = getX86RegisterDesc(cast<IntegerAttr>(op.getRegId()).getInt());
-    if (!reg)
-      return rewriter.notifyMatchFailure(op, "unsupported x86 register");
-
     Location loc = op.getLoc();
-    auto i64Type = rewriter.getI64Type();
-    Value ptr = stateSlotPointer(rewriter, loc, adaptor.getState(), reg->slot);
-    Value value = castInteger(rewriter, loc, adaptor.getValue(), i64Type);
-
-    if (reg->slot == X86RegisterSlot::RFLAGS) {
-      Value old = LLVM::LoadOp::create(rewriter, loc, i64Type, ptr, 8);
-      Value keepMask = integerConstant(rewriter, loc, i64Type,
-                                       ~X86ArithmeticFlagsMask);
-      Value flagMask = integerConstant(rewriter, loc, i64Type,
-                                       X86ArithmeticFlagsMask);
+    auto storageType = rewriter.getIntegerType(op.getStorageWidth());
+    Value ptr =
+        stateSlotPointer(rewriter, loc, adaptor.getState(), op.getSlot());
+    Value value = castInteger(rewriter, loc, adaptor.getValue(), storageType);
+    if (op.getBitOffset() != 0)
+      value = arith::ShLIOp::create(
+          rewriter, loc, value,
+          integerConstant(rewriter, loc, storageType, op.getBitOffset()));
+    APInt mask = cast<IntegerAttr>(op.getWriteMask()).getValue();
+    if (!mask.isAllOnes()) {
+      Value maskValue = integerConstant(rewriter, loc, storageType, mask);
+      value = arith::AndIOp::create(rewriter, loc, value, maskValue);
+      Value old = LLVM::LoadOp::create(rewriter, loc, storageType, ptr, 8);
+      Value keepMask = integerConstant(rewriter, loc, storageType, ~mask);
       old = arith::AndIOp::create(rewriter, loc, old, keepMask);
-      value = arith::AndIOp::create(rewriter, loc, value, flagMask);
       value = arith::OrIOp::create(rewriter, loc, old, value);
-    } else if (reg->width < 32 || !reg->zeroExtendOnWrite) {
-      if (reg->width != 64) {
-        Value old = LLVM::LoadOp::create(rewriter, loc, i64Type, ptr, 8);
-        const uint64_t fieldMask =
-            ((uint64_t{1} << reg->width) - 1) << reg->bitOffset;
-        Value keepMask = integerConstant(rewriter, loc, i64Type, ~fieldMask);
-        old = arith::AndIOp::create(rewriter, loc, old, keepMask);
-        if (reg->bitOffset != 0)
-          value = arith::ShLIOp::create(
-              rewriter, loc, value,
-              integerConstant(rewriter, loc, i64Type, reg->bitOffset));
-        value = arith::AndIOp::create(
-            rewriter, loc, value,
-            integerConstant(rewriter, loc, i64Type, fieldMask));
-        value = arith::OrIOp::create(rewriter, loc, old, value);
-      }
     }
 
     LLVM::StoreOp::create(rewriter, loc, value, ptr, 8);
@@ -180,7 +154,8 @@ struct LoadOpLowering : public OpConversionPattern<ir1::LoadOp> {
     auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
     Value address = castInteger(rewriter, op.getLoc(), adaptor.getAddr(),
                                 rewriter.getI64Type());
-    Value ptr = LLVM::IntToPtrOp::create(rewriter, op.getLoc(), ptrType, address);
+    Value ptr =
+        LLVM::IntToPtrOp::create(rewriter, op.getLoc(), ptrType, address);
     rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, op.getType(), ptr, 1);
     return success();
   }
@@ -195,86 +170,94 @@ struct StoreOpLowering : public OpConversionPattern<ir1::StoreOp> {
     auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
     Value address = castInteger(rewriter, op.getLoc(), adaptor.getAddr(),
                                 rewriter.getI64Type());
-    Value ptr = LLVM::IntToPtrOp::create(rewriter, op.getLoc(), ptrType, address);
+    Value ptr =
+        LLVM::IntToPtrOp::create(rewriter, op.getLoc(), ptrType, address);
     LLVM::StoreOp::create(rewriter, op.getLoc(), adaptor.getValue(), ptr, 1);
     rewriter.eraseOp(op);
     return success();
   }
 };
 
-struct X86AddIOpLowering : public OpConversionPattern<ir1::X86AddIOp> {
-  using OpConversionPattern::OpConversionPattern;
-
+template <typename SourceOp, typename TargetOp>
+struct BinaryIOpLowering : OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(ir1::X86AddIOp op, OpAdaptor adaptor,
+  matchAndRewrite(SourceOp op, typename SourceOp::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    Location loc = op.getLoc();
-    auto type = cast<IntegerType>(op.getRes().getType());
-    Value lhs = castInteger(rewriter, loc, adaptor.getLhs(), type);
-    Value rhs = castInteger(rewriter, loc, adaptor.getRhs(), type);
-    Value result = arith::AddIOp::create(rewriter, loc, lhs, rhs);
-    Value zero = integerConstant(rewriter, loc, type, 0);
-
-    Value cf = arith::CmpIOp::create(rewriter, loc,
-                                     arith::CmpIPredicate::ult, result, lhs);
-    Value zf = arith::CmpIOp::create(rewriter, loc,
-                                     arith::CmpIPredicate::eq, result, zero);
-
-    Value signShift = integerConstant(rewriter, loc, type, type.getWidth() - 1);
-    Value sfWide = arith::ShRUIOp::create(rewriter, loc, result, signShift);
-    Value sf = arith::TruncIOp::create(rewriter, loc, rewriter.getI1Type(),
-                                       sfWide);
-
-    Value xorLhsRhs = arith::XOrIOp::create(rewriter, loc, lhs, rhs);
-    Value notXor = arith::XOrIOp::create(
-        rewriter, loc, xorLhsRhs,
-        integerConstant(rewriter, loc, type, ~uint64_t{0}));
-    Value xorLhsResult = arith::XOrIOp::create(rewriter, loc, lhs, result);
-    Value overflowBits =
-        arith::AndIOp::create(rewriter, loc, notXor, xorLhsResult);
-    overflowBits =
-        arith::ShRUIOp::create(rewriter, loc, overflowBits, signShift);
-    Value of = arith::TruncIOp::create(rewriter, loc, rewriter.getI1Type(),
-                                       overflowBits);
-
-    Value afBits = arith::XOrIOp::create(rewriter, loc, lhs, rhs);
-    afBits = arith::XOrIOp::create(rewriter, loc, afBits, result);
-    afBits = arith::AndIOp::create(
-        rewriter, loc, afBits, integerConstant(rewriter, loc, type, 0x10));
-    Value af = arith::CmpIOp::create(rewriter, loc,
-                                     arith::CmpIPredicate::ne, afBits, zero);
-
-    Value parity = result;
-    for (unsigned shift : {4u, 2u, 1u}) {
-      Value shifted = arith::ShRUIOp::create(
-          rewriter, loc, parity,
-          integerConstant(rewriter, loc, type, shift));
-      parity = arith::XOrIOp::create(rewriter, loc, parity, shifted);
-    }
-    parity = arith::AndIOp::create(
-        rewriter, loc, parity, integerConstant(rewriter, loc, type, 1));
-    Value pf = arith::CmpIOp::create(rewriter, loc,
-                                     arith::CmpIPredicate::eq, parity, zero);
-
-    Value flags = packFlag(rewriter, loc, cf, 0);
-    for (auto [flag, bit] :
-         {std::pair<Value, unsigned>{pf, 2}, {af, 4}, {zf, 6}, {sf, 7},
-          {of, 11}})
-      flags = arith::OrIOp::create(rewriter, loc, flags,
-                                   packFlag(rewriter, loc, flag, bit));
-
-    rewriter.replaceOp(op, ValueRange{result, flags});
+    auto type = cast<IntegerType>(op.getType());
+    Value lhs = castInteger(rewriter, op.getLoc(), adaptor.getLhs(), type);
+    Value rhs = castInteger(rewriter, op.getLoc(), adaptor.getRhs(), type);
+    rewriter.replaceOpWithNewOp<TargetOp>(op, lhs, rhs);
     return success();
   }
 };
+
+struct CmpIOpLowering : OpConversionPattern<ir1::CmpIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ir1::CmpIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOpWithNewOp<arith::CmpIOp>(
+        op, static_cast<arith::CmpIPredicate>(op.getPredicate()),
+        adaptor.getLhs(), adaptor.getRhs());
+    return success();
+  }
+};
+
+struct CastIOpLowering : OpConversionPattern<ir1::CastIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ir1::CastIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOp(op,
+                       castInteger(rewriter, op.getLoc(), adaptor.getValue(),
+                                   cast<IntegerType>(op.getType())));
+    return success();
+  }
+};
+
+struct BitcastOpLowering : OpConversionPattern<ir1::BitcastOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ir1::BitcastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOpWithNewOp<arith::BitcastOp>(op, op.getType(),
+                                                  adaptor.getValue());
+    return success();
+  }
+};
+
+using SubIOpLowering = BinaryIOpLowering<ir1::SubIOp, arith::SubIOp>;
+using AndIOpLowering = BinaryIOpLowering<ir1::AndIOp, arith::AndIOp>;
+using OrIOpLowering = BinaryIOpLowering<ir1::OrIOp, arith::OrIOp>;
+using XOrIOpLowering = BinaryIOpLowering<ir1::XOrIOp, arith::XOrIOp>;
+using ShRUIOpLowering = BinaryIOpLowering<ir1::ShRUIOp, arith::ShRUIOp>;
+using ShLIOpLowering = BinaryIOpLowering<ir1::ShLIOp, arith::ShLIOp>;
+
+template <typename SourceOp, typename TargetOp>
+struct BinaryFOpLowering : OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(SourceOp op, typename SourceOp::Adaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOpWithNewOp<TargetOp>(op, adaptor.getLhs(),
+                                          adaptor.getRhs());
+    return success();
+  }
+};
+
+using AddFOpLowering = BinaryFOpLowering<ir1::AddFOp, arith::AddFOp>;
+using SubFOpLowering = BinaryFOpLowering<ir1::SubFOp, arith::SubFOp>;
+using MulFOpLowering = BinaryFOpLowering<ir1::MulFOp, arith::MulFOp>;
+using DivFOpLowering = BinaryFOpLowering<ir1::DivFOp, arith::DivFOp>;
 
 struct IR1LoweringPass
     : public PassWrapper<IR1LoweringPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(IR1LoweringPass)
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<arith::ArithDialect, func::FuncDialect,
-                    LLVM::LLVMDialect>();
+    registry
+        .insert<arith::ArithDialect, func::FuncDialect, LLVM::LLVMDialect>();
   }
 
   void runOnOperation() final {
@@ -285,13 +268,16 @@ struct IR1LoweringPass
     RewritePatternSet patterns(&getContext());
     arith::populateArithToLLVMConversionPatterns(typeConverter, patterns);
     populateFuncToLLVMConversionPatterns(typeConverter, patterns);
-    patterns.add<ConstIntOpLowering, LoadRegOpLowering, StoreRegOpLowering,
-                 AddIOpLowering, MulIOpLowering, LoadOpLowering,
-                 StoreOpLowering,
-                 X86AddIOpLowering>(typeConverter, &getContext());
+    patterns
+        .add<ConstIntOpLowering, LoadStateOpLowering, StoreStateOpLowering,
+             AddIOpLowering, MulIOpLowering, LoadOpLowering, StoreOpLowering,
+             SubIOpLowering, AndIOpLowering, OrIOpLowering, XOrIOpLowering,
+             ShRUIOpLowering, ShLIOpLowering, CmpIOpLowering, CastIOpLowering,
+             BitcastOpLowering, AddFOpLowering, SubFOpLowering, MulFOpLowering,
+             DivFOpLowering>(typeConverter, &getContext());
 
-    if (failed(applyFullConversion(getOperation(), target,
-                                   std::move(patterns))))
+    if (failed(
+            applyFullConversion(getOperation(), target, std::move(patterns))))
       signalPassFailure();
   }
 };

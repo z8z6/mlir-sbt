@@ -34,20 +34,17 @@ def ConstFloatOp : IR1_Op<"cf"> {
   let assemblyFormat = "attr-dict `:` type($res)";
 }
 
-def LoadRegOp : IR1_Op<"load_reg"> {
-  let arguments = (ins AnyType:$state, AnyAttr:$reg_id);
-  let results = (outs AnyType:$res);
-  let builders = [
-    OpBuilder<(ins "mlir::Value":$state, "unsigned":$reg_id)>
-  ];
+def LoadStateOp : IR1_Op<"load_state"> {
+  let arguments = (ins AnyType:$state, I32Attr:$slot, I32Attr:$bit_offset,
+                       I32Attr:$storage_width);
+  let results = (outs AnyInteger:$res);
   let assemblyFormat = "attr-dict $state `:` type($state) `->` type($res)";
 }
 
-def StoreRegOp : IR1_Op<"store_reg"> {
-  let arguments = (ins AnyType:$state, AnyType:$value, AnyAttr:$reg_id);
-  let builders = [
-    OpBuilder<(ins "mlir::Value":$state, "mlir::Value":$value, "unsigned":$reg_id)>
-  ];
+def StoreStateOp : IR1_Op<"store_state"> {
+  let arguments = (ins AnyType:$state, AnyInteger:$value, I32Attr:$slot,
+                       I32Attr:$bit_offset, I32Attr:$storage_width,
+                       AnyAttr:$write_mask);
   let assemblyFormat = "attr-dict $state `,` $value `:` type($state) `,` type($value)";
 }
 
@@ -66,13 +63,41 @@ def AddIOp : IR1_Op<"addi"> {
   let assemblyFormat = "attr-dict `(`$lhs `:` type($lhs)`,` $rhs `:` type($rhs)`)` `:` type($res)";
 }
 
-def X86AddIOp : IR1_Op<"x86_addi"> {
+class IR1_BinaryIOp<string mnemonic> : IR1_Op<mnemonic> {
   let arguments = (ins AnyInteger:$lhs, AnyInteger:$rhs);
-  let results = (outs AnyInteger:$res, I64:$flags);
+  let results = (outs AnyInteger:$res);
   let assemblyFormat = "attr-dict `(`$lhs `:` type($lhs)`,` $rhs `:` type($rhs)`)` `:` type($res)";
 }
 
+def SubIOp  : IR1_BinaryIOp<"subi">;
+def AndIOp  : IR1_BinaryIOp<"andi">;
+def OrIOp   : IR1_BinaryIOp<"ori">;
+def XOrIOp  : IR1_BinaryIOp<"xori">;
+def ShRUIOp : IR1_BinaryIOp<"shrui">;
+def ShLIOp  : IR1_BinaryIOp<"shli">;
+
+def CmpIOp : IR1_Op<"cmpi"> {
+  let arguments = (ins AnyInteger:$lhs, AnyInteger:$rhs, I32Attr:$predicate);
+  let results = (outs I1:$res);
+}
+
+def CastIOp : IR1_Op<"casti"> {
+  let arguments = (ins AnyInteger:$value);
+  let results = (outs AnyInteger:$res);
+}
+
+def BitcastOp : IR1_Op<"bitcast"> {
+  let arguments = (ins AnyType:$value);
+  let results = (outs AnyType:$res);
+}
+
 def AddFOp : IR1_Op<"addf"> {
+  let arguments = (ins AnyFloat:$lhs, AnyFloat:$rhs);
+  let results = (outs AnyFloat:$res);
+  let assemblyFormat = "attr-dict `(`$lhs `:` type($lhs)`,` $rhs `:` type($rhs)`)` `:` type($res)";
+}
+
+def SubFOp : IR1_Op<"subf"> {
   let arguments = (ins AnyFloat:$lhs, AnyFloat:$rhs);
   let results = (outs AnyFloat:$res);
   let assemblyFormat = "attr-dict `(`$lhs `:` type($lhs)`,` $rhs `:` type($rhs)`)` `:` type($res)";

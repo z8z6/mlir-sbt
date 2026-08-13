@@ -1,0 +1,4 @@
+interface:
+  display_name: "X86 Instruction Translation"
+  short_description: "Implement and verify x86 instruction translation families"
+  default_prompt: "Use $x86-instruction-translation to implement the next x86 instruction family end to end."

@@ -6,6 +6,8 @@ global execute_case
 extern run_case
 extern fixture_input
 extern fixture_output
+extern fixture_xmm_input
+extern fixture_xmm_output
 
 %define RAX 0
 %define RBX 8
@@ -77,7 +79,41 @@ execute_case:
   mov r15, [rel fixture_input + R15_]
   mov rdi, [rel fixture_input + RDI]
 
+  movdqu xmm0,  [rel fixture_xmm_input + 0]
+  movdqu xmm1,  [rel fixture_xmm_input + 16]
+  movdqu xmm2,  [rel fixture_xmm_input + 32]
+  movdqu xmm3,  [rel fixture_xmm_input + 48]
+  movdqu xmm4,  [rel fixture_xmm_input + 64]
+  movdqu xmm5,  [rel fixture_xmm_input + 80]
+  movdqu xmm6,  [rel fixture_xmm_input + 96]
+  movdqu xmm7,  [rel fixture_xmm_input + 112]
+  movdqu xmm8,  [rel fixture_xmm_input + 128]
+  movdqu xmm9,  [rel fixture_xmm_input + 144]
+  movdqu xmm10, [rel fixture_xmm_input + 160]
+  movdqu xmm11, [rel fixture_xmm_input + 176]
+  movdqu xmm12, [rel fixture_xmm_input + 192]
+  movdqu xmm13, [rel fixture_xmm_input + 208]
+  movdqu xmm14, [rel fixture_xmm_input + 224]
+  movdqu xmm15, [rel fixture_xmm_input + 240]
+
   call run_case
+
+  movdqu [rel fixture_xmm_output + 0], xmm0
+  movdqu [rel fixture_xmm_output + 16], xmm1
+  movdqu [rel fixture_xmm_output + 32], xmm2
+  movdqu [rel fixture_xmm_output + 48], xmm3
+  movdqu [rel fixture_xmm_output + 64], xmm4
+  movdqu [rel fixture_xmm_output + 80], xmm5
+  movdqu [rel fixture_xmm_output + 96], xmm6
+  movdqu [rel fixture_xmm_output + 112], xmm7
+  movdqu [rel fixture_xmm_output + 128], xmm8
+  movdqu [rel fixture_xmm_output + 144], xmm9
+  movdqu [rel fixture_xmm_output + 160], xmm10
+  movdqu [rel fixture_xmm_output + 176], xmm11
+  movdqu [rel fixture_xmm_output + 192], xmm12
+  movdqu [rel fixture_xmm_output + 208], xmm13
+  movdqu [rel fixture_xmm_output + 224], xmm14
+  movdqu [rel fixture_xmm_output + 240], xmm15
 
   mov [rel fixture_output + RAX], rax
   mov [rel fixture_output + RBX], rbx

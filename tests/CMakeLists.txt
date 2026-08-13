@@ -11,15 +11,17 @@ add_test(NAME sbt-unit COMMAND sbt-unit)
 # This keeps every assembly file self-contained and gives CTest a precise case
 # name when an encoding or an expected architectural state regresses.
 enable_language(ASM_NASM)
-file(GLOB X86_ADD_CASES CONFIGURE_DEPENDS
-  "${CMAKE_CURRENT_SOURCE_DIR}/isa/x86/add/*/case.asm")
+file(GLOB X86_CASES CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/isa/x86/*/*/case.asm")
 
-foreach(CASE_ASM IN LISTS X86_ADD_CASES)
+foreach(CASE_ASM IN LISTS X86_CASES)
   get_filename_component(CASE_DIR "${CASE_ASM}" DIRECTORY)
+  get_filename_component(INSTRUCTION_DIR "${CASE_DIR}" DIRECTORY)
+  get_filename_component(INSTRUCTION "${INSTRUCTION_DIR}" NAME)
   file(RELATIVE_PATH CASE_REL
-    "${CMAKE_CURRENT_SOURCE_DIR}/isa/x86/add" "${CASE_DIR}")
+    "${INSTRUCTION_DIR}" "${CASE_DIR}")
+  set(CASE_TARGET "x86_${INSTRUCTION}_${CASE_REL}")
   string(REPLACE "-" "_" CASE_TARGET "${CASE_TARGET}")
-  set(CASE_TARGET "x86_add_${CASE_REL}")
   set_source_files_properties("${CASE_ASM}" PROPERTIES LANGUAGE ASM_NASM)
   add_executable("${CASE_TARGET}" fixture_runner.cpp fixture_executor.asm
                  "${CASE_ASM}")
@@ -29,7 +31,7 @@ foreach(CASE_ASM IN LISTS X86_ADD_CASES)
   set_target_properties("${CASE_TARGET}" PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON)
-  add_test(NAME "isa.x86.add.${CASE_REL}"
+  add_test(NAME "isa.x86.${INSTRUCTION}.${CASE_REL}"
            COMMAND "${CASE_TARGET}")
 
   set(CASE_INPUT_OBJECT
@@ -61,6 +63,6 @@ foreach(CASE_ASM IN LISTS X86_ADD_CASES)
   set_target_properties("${TRANSLATED_TARGET}" PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON)
-  add_test(NAME "isa.x86.add.${CASE_REL}.translated"
+  add_test(NAME "isa.x86.${INSTRUCTION}.${CASE_REL}.translated"
            COMMAND "${TRANSLATED_TARGET}")
 endforeach()

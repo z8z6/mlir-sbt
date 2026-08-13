@@ -1,13 +1,14 @@
 #include "IR/IR1.h"
+#include "IR/X86.h"
 #include "Target/X86Register.h"
 
-#include "gtest/gtest.h"
+#include "Target/X86/MCTargetDesc/X86MCTargetDesc.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
-#include "Target/X86/MCTargetDesc/X86MCTargetDesc.h"
+#include "gtest/gtest.h"
 
 #include <array>
 #include <cstdint>
@@ -23,20 +24,19 @@ using RegisterState =
 using TranslatedBlock = void (*)(uint64_t *);
 
 uint64_t computeFlags(uint64_t lhs, uint64_t rhs, unsigned width) {
-  const uint64_t mask = width == 64 ? ~uint64_t{0}
-                                    : (uint64_t{1} << width) - 1;
+  const uint64_t mask = width == 64 ? ~uint64_t{0} : (uint64_t{1} << width) - 1;
   lhs &= mask;
   rhs &= mask;
   const uint64_t result = (lhs + rhs) & mask;
   const bool cf = width == 64 ? result < lhs : lhs + rhs > mask;
-  const bool pf = (__builtin_popcount(static_cast<unsigned>(result & 0xff)) & 1) == 0;
+  const bool pf =
+      (__builtin_popcount(static_cast<unsigned>(result & 0xff)) & 1) == 0;
   const bool af = ((lhs ^ rhs ^ result) & 0x10) != 0;
   const bool zf = result == 0;
   const bool sf = ((result >> (width - 1)) & 1) != 0;
   const bool of = ((~(lhs ^ rhs) & (lhs ^ result)) >> (width - 1)) & 1;
-  return (uint64_t{cf} << 0) | (uint64_t{pf} << 2) |
-         (uint64_t{af} << 4) | (uint64_t{zf} << 6) |
-         (uint64_t{sf} << 7) | (uint64_t{of} << 11);
+  return (uint64_t{cf} << 0) | (uint64_t{pf} << 2) | (uint64_t{af} << 4) |
+         (uint64_t{zf} << 6) | (uint64_t{sf} << 7) | (uint64_t{of} << 11);
 }
 
 uint64_t readRegister(const RegisterState &state, unsigned llvmRegister) {
@@ -46,7 +46,8 @@ uint64_t readRegister(const RegisterState &state, unsigned llvmRegister) {
   return desc->width == 64 ? value : value & ((uint64_t{1} << desc->width) - 1);
 }
 
-void writeRegister(RegisterState &state, unsigned llvmRegister, uint64_t value) {
+void writeRegister(RegisterState &state, unsigned llvmRegister,
+                   uint64_t value) {
   auto desc = getX86RegisterDesc(llvmRegister);
   ASSERT_TRUE(desc.has_value());
   uint64_t &slot = state[static_cast<size_t>(desc->slot)];
@@ -65,15 +66,16 @@ public:
   AddProgram(unsigned destination, unsigned source, unsigned width) {
     auto &builder = context.Builder;
     Location loc = builder.getUnknownLoc();
-    Value lhs = ir1::LoadRegOp::create(builder, loc, context.getState(),
-                                       destination);
-    Value rhs = ir1::LoadRegOp::create(builder, loc, context.getState(), source);
+    Value lhs =
+        x86ir::ReadRegOp::create(builder, loc, context.getState(), destination);
+    Value rhs =
+        x86ir::ReadRegOp::create(builder, loc, context.getState(), source);
     TypeRange resultTypes{builder.getIntegerType(width), builder.getI64Type()};
-    auto add = ir1::X86AddIOp::create(builder, loc, resultTypes, lhs, rhs);
-    ir1::StoreRegOp::create(builder, loc, context.getState(), add.getRes(),
-                            destination);
-    ir1::StoreRegOp::create(builder, loc, context.getState(), add.getFlags(),
-                            llvm::X86::RFLAGS);
+    auto add = x86ir::AddIOp::create(builder, loc, resultTypes, lhs, rhs);
+    x86ir::WriteRegOp::create(builder, loc, context.getState(), add.getRes(),
+                              destination);
+    x86ir::WriteRegOp::create(builder, loc, context.getState(), add.getFlags(),
+                              llvm::X86::RFLAGS);
 
     EXPECT_TRUE(succeeded(context.lower()));
     auto engineOrError = ExecutionEngine::create(context.Module);
@@ -125,31 +127,25 @@ void checkAdd(unsigned destination, unsigned source, unsigned width,
 }
 
 TEST(Lowering, Add64RegisterStateMatches) {
-  checkAdd(llvm::X86::RAX, llvm::X86::RBX, 64,
-           0xffffffffffffffffULL, 1);
-  checkAdd(llvm::X86::RAX, llvm::X86::RBX, 64,
-           0x7fffffffffffffffULL, 1);
+  checkAdd(llvm::X86::RAX, llvm::X86::RBX, 64, 0xffffffffffffffffULL, 1);
+  checkAdd(llvm::X86::RAX, llvm::X86::RBX, 64, 0x7fffffffffffffffULL, 1);
 }
 
 TEST(Lowering, Add64DefinedFlagMatrixMatches) {
   // PF clear, with every arithmetic flag otherwise clear.
   checkAdd(llvm::X86::RAX, llvm::X86::RBX, 64, 0, 1);
   // CF and AF set while ZF remains clear.
-  checkAdd(llvm::X86::RAX, llvm::X86::RBX, 64,
-           0xffffffffffffffffULL, 2);
+  checkAdd(llvm::X86::RAX, llvm::X86::RBX, 64, 0xffffffffffffffffULL, 2);
   // SF set without signed overflow.
-  checkAdd(llvm::X86::RAX, llvm::X86::RBX, 64,
-           0x8000000000000000ULL, 0);
+  checkAdd(llvm::X86::RAX, llvm::X86::RBX, 64, 0x8000000000000000ULL, 0);
   // Negative plus negative overflows to positive and carries unsigned.
-  checkAdd(llvm::X86::RAX, llvm::X86::RBX, 64,
-           0x8000000000000000ULL, 0xffffffffffffffffULL);
+  checkAdd(llvm::X86::RAX, llvm::X86::RBX, 64, 0x8000000000000000ULL,
+           0xffffffffffffffffULL);
 }
 
 TEST(Lowering, Add32ZeroExtendsDestination) {
-  checkAdd(llvm::X86::EAX, llvm::X86::EBX, 32,
-           0xffffffffU, 1);
-  checkAdd(llvm::X86::EAX, llvm::X86::EBX, 32,
-           0x7fffffffU, 1);
+  checkAdd(llvm::X86::EAX, llvm::X86::EBX, 32, 0xffffffffU, 1);
+  checkAdd(llvm::X86::EAX, llvm::X86::EBX, 32, 0x7fffffffU, 1);
 }
 
 TEST(Lowering, Add16PreservesUpperBits) {

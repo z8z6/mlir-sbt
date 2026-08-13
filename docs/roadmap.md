@@ -21,8 +21,8 @@
 - IR1 Dialect 和 C++ builder 可生成；
 - 当前测试矩阵中的 ADD 寄存器、立即数、内存读写编码可提升为 IR1；
 - 当前 IR1 子集可完整降到 LLVM Dialect/LLVM IR，并发射 x86 目标文件；
-- 30 个 ADD fixture 已接入原生和静态翻译双路径测试，完整比较寄存器、flags
-  和测试内存。
+- 30 个 ADD 和 32 个 SUB fixture 已接入原生和静态翻译双路径测试，完整比较
+  寄存器、flags 和测试内存。
 
 基线已经完成指令级 ADD 纵向闭环，但不等于程序级翻译完成：当前没有从输入
 恢复 CFG，state ABI 尚未覆盖 RIP、段基址和异常，guest 内存也仍是受约束的

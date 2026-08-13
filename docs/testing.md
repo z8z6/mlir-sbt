@@ -12,7 +12,7 @@ x86 指令 fixture 同时验证两件事：
 
 ```text
                          ┌─ 原生链接 run_case ────────┐
-case.asm ── NASM/ELF ────┤                            ├─ 完整状态比较
+case.asm ── NASM/ELF ────┤                            ├─ 分别与 output.toml 比较
                          └─ sbt → translated_block ───┘
                                       ▲
 input.toml ── 初始化寄存器、flags、内存 ┘
@@ -169,7 +169,7 @@ runner 对输出值支持三种写法：
 - 每个 ISA case 的 1 个原生测试；
 - 每个 ISA case 的 1 个静态翻译测试。
 
-当前 30 个 ADD case 因而共有 61 条 CTest。
+当前 30 个 ADD case 和 32 个 SUB case，加上 `sbt-unit`，共有 125 条 CTest。
 
 ## 7. 运行测试
 

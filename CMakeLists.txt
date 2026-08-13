@@ -41,7 +41,7 @@ include(HandleLLVMOptions)
 add_subdirectory(tblgen)
 add_subdirectory(mlir)
 
-file(GLOB_RECURSE SOURCE_FILES
+file(GLOB_RECURSE SOURCE_FILES CONFIGURE_DEPENDS
         src/*.cpp
         include/*.h
 )
@@ -51,7 +51,7 @@ list(APPEND SOURCE_FILES
 )
 list(REMOVE_ITEM SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp)
 add_library(sbt-lib STATIC ${SOURCE_FILES})
-add_dependencies(sbt-lib ir1-mlir-gen ir1-x86-converter-gen)
+add_dependencies(sbt-lib ir1-mlir-gen x86-mlir-gen ir1-x86-converter-gen)
 add_executable(sbt src/main.cpp)
 
 target_include_directories(sbt-lib PUBLIC

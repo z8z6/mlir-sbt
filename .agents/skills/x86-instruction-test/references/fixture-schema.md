@@ -16,6 +16,8 @@ All names must occur in both TOML files. Numeric values use hexadecimal.
 - Input `rsp`, and segment registers may use `"runtime"` when owned by the
   harness/environment.
 - Output `rip` and `rsp` may use `"ignore"` because calls and ASLR vary them.
+- Output `eflags = "flags"` delegates comparison to the complete `[flags]`
+  table. Use this when an instruction leaves at least one flag undefined.
 - Output registers unaffected by the instruction use `"unchanged"`.
 - Do not ignore ordinary GPRs, segment selectors, or flags merely for
   convenience.
@@ -27,12 +29,16 @@ Both files contain `[flags]` with every field:
 `cf pf af zf sf tf if df of`
 
 Use `0` or `1` for specified inputs/results. Use `"unchanged"` in output for
-flags the instruction preserves. ADD defines CF, PF, AF, ZF, SF, OF and
-preserves TF, IF, DF.
+flags the instruction preserves. ADD and SUB define CF, PF, AF, ZF, SF, OF and
+preserve TF, IF, DF; consult the architecture reference for every other
+instruction rather than copying this flag set blindly.
 
 `eflags` remains present in `[registers]` to match GDB. Keep it consistent with
 the flag fields; the runner also validates individual flags so failures remain
 diagnosable.
+
+Use `"ignore"` only for architecturally undefined individual flags. Defined
+and preserved flags must still use `0`, `1`, or `"unchanged"`.
 
 ## Memory
 
@@ -65,3 +71,10 @@ Every fixture has two consumers with the same TOML state:
 
 Both tests must pass. A lowering-only/JIT unit test is useful additional
 coverage but does not replace the static translation path.
+
+## Vector registers
+
+SSE fixtures may add a `[vectors]` table containing `xmm0` through `xmm15` as
+128-bit hexadecimal strings. Output entries use an exact 128-bit value or
+`"unchanged"`. Scalar legacy SSE cases must check the preserved upper 96/64
+bits of the destination as well as the computed low element.

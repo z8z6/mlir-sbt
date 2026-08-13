@@ -39,6 +39,10 @@ def validate(case: Path) -> list[str]:
             ignored = {name for name, value in registers.items() if value == "ignore"}
             if ignored - {"rip", "rsp"}:
                 errors.append(f"{case / filename}: only rip/rsp may be ignored")
+        vectors = data.get("vectors", {})
+        invalid_vectors = set(vectors) - {f"xmm{i}" for i in range(16)}
+        if invalid_vectors:
+            errors.append(f"{case / filename}: invalid vector register(s) {sorted(invalid_vectors)}")
     asm = (case / "case.asm").read_text().splitlines()
     instructions = [line.strip() for line in asm if line.strip() and not
                     re.match(r"^(bits|section|global|run_case:|ret$)", line.strip())]

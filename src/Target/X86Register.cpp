@@ -5,11 +5,10 @@
 using namespace llvm;
 using namespace z8;
 
-std::optional<X86RegisterDesc>
-z8::getX86RegisterDesc(unsigned reg) {
+std::optional<X86RegisterDesc> z8::getX86RegisterDesc(unsigned reg) {
 #define REG_CASE(NAME, SLOT, WIDTH, OFFSET, ZERO_EXTEND)                       \
   case X86::NAME:                                                              \
-    return X86RegisterDesc{X86RegisterSlot::SLOT, WIDTH, OFFSET, ZERO_EXTEND}
+    return X86RegisterDesc { X86RegisterSlot::SLOT, WIDTH, OFFSET, ZERO_EXTEND }
 
   switch (reg) {
     REG_CASE(RAX, RAX, 64, 0, false);
@@ -49,10 +48,10 @@ z8::getX86RegisterDesc(unsigned reg) {
     REG_CASE(SP, RSP, 16, 0, false);
     REG_CASE(SPL, RSP, 8, 0, false);
 #define EXTENDED_GPR(N)                                                        \
-    REG_CASE(R##N, R##N, 64, 0, false);                                       \
-    REG_CASE(R##N##D, R##N, 32, 0, true);                                     \
-    REG_CASE(R##N##W, R##N, 16, 0, false);                                    \
-    REG_CASE(R##N##B, R##N, 8, 0, false)
+  REG_CASE(R##N, R##N, 64, 0, false);                                          \
+  REG_CASE(R##N##D, R##N, 32, 0, true);                                        \
+  REG_CASE(R##N##W, R##N, 16, 0, false);                                       \
+  REG_CASE(R##N##B, R##N, 8, 0, false)
     EXTENDED_GPR(8);
     EXTENDED_GPR(9);
     EXTENDED_GPR(10);
@@ -63,6 +62,24 @@ z8::getX86RegisterDesc(unsigned reg) {
     EXTENDED_GPR(15);
 #undef EXTENDED_GPR
     REG_CASE(RFLAGS, RFLAGS, 64, 0, false);
+#define XMM_REGISTER(N) REG_CASE(XMM##N, XMM##N, 128, 0, false)
+    XMM_REGISTER(0);
+    XMM_REGISTER(1);
+    XMM_REGISTER(2);
+    XMM_REGISTER(3);
+    XMM_REGISTER(4);
+    XMM_REGISTER(5);
+    XMM_REGISTER(6);
+    XMM_REGISTER(7);
+    XMM_REGISTER(8);
+    XMM_REGISTER(9);
+    XMM_REGISTER(10);
+    XMM_REGISTER(11);
+    XMM_REGISTER(12);
+    XMM_REGISTER(13);
+    XMM_REGISTER(14);
+    XMM_REGISTER(15);
+#undef XMM_REGISTER
   default:
     return std::nullopt;
   }
