@@ -10,6 +10,7 @@ bool X86Machine::LLVMInitializeX86() {
   LLVMInitializeX86TargetInfo();
   LLVMInitializeX86TargetMC();
   LLVMInitializeX86Disassembler();
+  LLVMInitializeX86AsmPrinter();
   return true;
 }
 

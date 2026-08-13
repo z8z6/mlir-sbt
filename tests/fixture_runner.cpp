@@ -1,0 +1,180 @@
+#include <array>
+#include <cctype>
+#include <cstdint>
+#include <fstream>
+#include <iostream>
+#include <map>
+#include <stdexcept>
+#include <string>
+
+#ifdef TRANSLATED_FIXTURE
+extern "C" void translated_block(uint64_t *state);
+#else
+extern "C" void execute_case();
+#endif
+extern "C" {
+std::array<uint64_t, 25> fixture_input{};
+std::array<uint64_t, 24> fixture_output{};
+}
+
+namespace {
+enum RegisterIndex {
+  RAX, RBX, RCX, RDX, RSI, RDI, RBP, RSP, R8, R9, R10, R11, R12, R13, R14,
+  R15, RIP, EFLAGS, CS, SS, DS, ES, FS, GS, RegisterCount
+};
+constexpr size_t MemoryIndex = RegisterCount;
+constexpr size_t StateSize = RegisterCount + 1;
+
+const std::array<std::string, RegisterCount> RegisterNames = {
+    "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp",
+    "r8",  "r9",  "r10", "r11", "r12", "r13", "r14", "r15",
+    "rip", "eflags", "cs", "ss", "ds", "es", "fs", "gs"};
+const std::map<std::string, unsigned> FlagBits = {
+    {"cf", 0}, {"pf", 2}, {"af", 4}, {"zf", 6}, {"sf", 7},
+    {"tf", 8}, {"if", 9}, {"df", 10}, {"of", 11}};
+
+struct Fixture {
+  std::map<std::string, std::string> registers;
+  std::map<std::string, std::string> flags;
+  std::map<std::string, std::string> memory;
+};
+
+std::string trim(std::string text) {
+  while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front())))
+    text.erase(text.begin());
+  while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back())))
+    text.pop_back();
+  return text;
+}
+
+Fixture parseToml(const char *path) {
+  std::ifstream input(path);
+  if (!input) throw std::runtime_error(std::string("cannot open ") + path);
+  Fixture result;
+  std::string section, line;
+  while (std::getline(input, line)) {
+    if (size_t comment = line.find('#'); comment != std::string::npos)
+      line.erase(comment);
+    line = trim(line);
+    if (line.empty()) continue;
+    if (line.front() == '[' && line.back() == ']') {
+      section = trim(line.substr(1, line.size() - 2));
+      continue;
+    }
+    size_t equal = line.find('=');
+    if (equal == std::string::npos) throw std::runtime_error("invalid TOML");
+    std::string key = trim(line.substr(0, equal));
+    std::string value = trim(line.substr(equal + 1));
+    if (key.size() >= 2 && key.front() == '"') key = key.substr(1, key.size()-2);
+    if (value.size() >= 2 && value.front() == '"')
+      value = value.substr(1, value.size()-2);
+    auto *target = section == "registers" ? &result.registers
+                 : section == "flags" ? &result.flags
+                 : section == "memory" ? &result.memory : nullptr;
+    if (!target) throw std::runtime_error("unsupported TOML section: " + section);
+    (*target)[key] = value;
+  }
+  return result;
+}
+
+size_t registerIndex(const std::string &name) {
+  for (size_t i = 0; i < RegisterNames.size(); ++i)
+    if (RegisterNames[i] == name) return i;
+  throw std::runtime_error("unsupported register: " + name);
+}
+
+uint64_t number(const std::string &value) { return std::stoull(value, nullptr, 0); }
+
+void requireComplete(const Fixture &fixture, const char *path) {
+  for (const std::string &name : RegisterNames)
+    if (!fixture.registers.count(name))
+      throw std::runtime_error(std::string(path) + " missing register " + name);
+  for (const auto &[name, bit] : FlagBits)
+    if (!fixture.flags.count(name))
+      throw std::runtime_error(std::string(path) + " missing flag " + name);
+}
+
+uint64_t composeFlags(const Fixture &fixture) {
+  uint64_t flags = number(fixture.registers.at("eflags")) | 2;
+  for (const auto &[name, bit] : FlagBits) {
+    flags &= ~(uint64_t{1} << bit);
+    flags |= (number(fixture.flags.at(name)) & 1) << bit;
+  }
+  return flags;
+}
+
+bool check(const std::string &kind, const std::string &name, uint64_t actual,
+           const std::string &expected, uint64_t unchanged) {
+  if (expected == "ignore") return true;
+  uint64_t wanted = expected == "unchanged" ? unchanged : number(expected);
+  if (actual == wanted) return true;
+  std::cerr << OUTPUT_FILE << ": " << kind << ' ' << name << " expected 0x"
+            << std::hex << wanted << ", got 0x" << actual << '\n';
+  return false;
+}
+
+void executeFixture() {
+#ifdef TRANSLATED_FIXTURE
+  // The translated block ABI contains the 16 GPR slots followed by RFLAGS.
+  // RIP, RSP-as-control-state and segment registers are not modified by ADD,
+  // so their fixture values remain unchanged (RSP/RIP are ignored by schema).
+  std::array<uint64_t, 17> state{};
+  for (size_t index = RAX; index <= R15; ++index)
+    state[index] = fixture_input[index];
+  state[16] = fixture_input[EFLAGS];
+  translated_block(state.data());
+
+  for (size_t index = 0; index < RegisterCount; ++index)
+    fixture_output[index] = fixture_input[index];
+  for (size_t index = RAX; index <= R15; ++index)
+    fixture_output[index] = state[index];
+  fixture_output[EFLAGS] = state[16];
+#else
+  execute_case();
+#endif
+}
+} // namespace
+
+int main() {
+  try {
+    Fixture input = parseToml(INPUT_FILE);
+    Fixture output = parseToml(OUTPUT_FILE);
+    requireComplete(input, INPUT_FILE);
+    requireComplete(output, OUTPUT_FILE);
+
+    for (const auto &[name, value] : input.registers) {
+      size_t index = registerIndex(name);
+      if (value == "runtime" || value == "run_case") continue;
+      fixture_input[index] = value == "memory_base"
+          ? reinterpret_cast<uint64_t>(&fixture_input[MemoryIndex]) - 24
+          : number(value);
+    }
+    fixture_input[EFLAGS] = composeFlags(input);
+    auto memory = input.memory.find("rdi+24");
+    if (memory == input.memory.end()) throw std::runtime_error("missing rdi+24 input");
+    fixture_input[MemoryIndex] = number(memory->second);
+
+    executeFixture();
+    bool passed = true;
+    for (const auto &[name, expected] : output.registers) {
+      size_t index = registerIndex(name);
+      passed &= check("register", name, fixture_output[index], expected,
+                      fixture_input[index]);
+    }
+    for (const auto &[name, expected] : output.flags) {
+      unsigned bit = FlagBits.at(name);
+      uint64_t actual = (fixture_output[EFLAGS] >> bit) & 1;
+      uint64_t before = (fixture_input[EFLAGS] >> bit) & 1;
+      passed &= check("flag", name, actual, expected, before);
+    }
+    auto expectedMemory = output.memory.find("rdi+24");
+    if (expectedMemory == output.memory.end())
+      throw std::runtime_error("missing rdi+24 output");
+    passed &= check("memory", "rdi+24", fixture_input[MemoryIndex],
+                    expectedMemory->second, fixture_input[MemoryIndex]);
+    return passed ? 0 : 1;
+  } catch (const std::exception &error) {
+    std::cerr << "fixture error: " << error.what() << '\n';
+    return 2;
+  }
+}

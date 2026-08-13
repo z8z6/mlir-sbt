@@ -37,33 +37,45 @@ x86 → x86 并非多余步骤：它可以隔离跨架构指令选择问题，�
       → loadSrcOperand / op / storeDstOperand
   → IR1Context::lower
       → IR1LoweringPass
+      → LLVM Dialect
+  → IR1Context::emitObject
+      → translateModuleToLLVMIR
+      → LLVM TargetMachine
+      → x86 relocatable object
 ```
 
 ### 2.2 模块职责
 
 | 模块 | 路径 | 当前职责 |
 |---|---|---|
-| 命令行与错误处理 | `include/Support`, `src/Support` | 解析 `-i`，解包 LLVM `Expected` |
+| 命令行与错误处理 | `include/Support`, `src/Support` | 解析 `-i`、`-o` 和 `--quiet`，解包 LLVM `Expected` |
 | 对象文件 | `include/Object`, `src/Object` | 打开目标文件、遍历代码 section |
 | 目标机抽象 | `include/Target`, `src/Target` | 初始化 LLVM x86 MC 组件，提供反汇编器和指令描述 |
 | IR0 | `include/IR/IR0.h`, `src/IR/IR0.cpp` | 保存地址与 `MCInst`，打印汇编文本 |
 | IR1 Dialect | `mlir/IR1.td`, `include/IR/IR1.h` | 定义并注册自定义 MLIR 操作 |
 | 指令提升 | `src/IR/IR1Converter.cpp`, `src/IR/IR1ArithConverter.cpp` | 读取显式操作数，将部分 ADD 提升到 IR1 |
 | 转换器生成 | `tblgen/` | 从 LLVM x86 TableGen 记录生成转换器类及 opcode switch |
-| 降级 Pass | `src/Pass/IR1Lowering.cpp` | 当前仅把 `ir1.ci` 改写为 `arith.constant` |
+| 降级 Pass | `src/Pass/IR1Lowering.cpp` | 将当前寄存器状态、整数运算、内存访问和 ADD flags 降到 LLVM Dialect |
+| 目标发射 | `src/IR/IR1.cpp` | 翻译到 LLVM IR，并通过宿主 TargetMachine 发射目标文件 |
 
 ### 2.3 已验证的范围
 
-仓库中的 `tests/arith/add` 覆盖部分 `ADDrr`、`ADDri` 和 `ADDrm` 编码。现有构建产物可完成反汇编和 IR1 打印，证明 LLVM MC、生成式分派和 MLIR Dialect 已经连通。
+仓库中的 `tests/isa/x86/add` 覆盖 ADD 的寄存器、立即数、内存读取和内存写回
+形式。每个 fixture 都有宿主原生基准和 `sbt` 静态翻译测试，两条路径使用相同
+输入与期待状态；具体流程见[指令测试流程](testing.md)。这验证了 LLVM MC、
+生成式分派、IR1、完整 lowering、目标文件发射和 translated block 执行的纵向
+链路。
 
 这条路径仍有以下边界：
 
-- 生成器会为所有名称以 `ADD` 开头的 x86 指令建立分派，但只有 `src/IR/IR1ArithConverter.cpp` 中少数转换器实现了 `op()`；
-- 不支持的 opcode 当前被静默忽略，已分派但未实现的 opcode 只打印诊断，容易产生不完整翻译；
+- 生成器仍会为所有名称以 `ADD` 开头的 x86 指令建立分派，但只有显式标记的
+  converter 已实现语义；已分派但未实现的 converter 会令翻译失败；
+- 完全没有进入生成 switch 的 opcode 尚缺少统一的 unsupported 诊断；
 - 反汇编失败时跳过一个字节，没有记录 gap 或终止当前基本块；
 - 所有代码 section 被线性扫描，没有函数、符号、重定位和 CFG；
-- 当前 lowering 是 partial conversion，绝大多数 `ir1` 操作会保留；
-- CMake 尚未链接 MLIR LLVM Dialect/LLVM translation 组件，因而没有 LLVM IR 和代码生成出口。
+- 当前 state ABI 只覆盖 GPR 与 RFLAGS，RIP、段状态、异常和程序级控制流尚未
+  进入 translated block ABI；
+- `lock add` 的现有 fixture 只验证单线程结果，尚未验证翻译产物的并发原子性。
 
 ## 3. 目标架构
 
@@ -165,4 +177,3 @@ LLVM IR 只承担已经显式化后的普通计算、控制流和运行时调用
 - `--verify-each`：每个 Pass 后执行 verifier。
 
 核心验证方式是差分执行：在相同初始寄存器/内存状态下运行原始片段和翻译后片段，比较定义的寄存器、flags、内存写入和退出原因。
-

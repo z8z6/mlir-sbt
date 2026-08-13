@@ -1,0 +1,4 @@
+interface:
+  display_name: "x86 Instruction Tests"
+  short_description: "Create complete x86 instruction-state test fixtures"
+  default_prompt: "Use $x86-instruction-test to add or update an x86 instruction test fixture."

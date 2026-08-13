@@ -18,5 +18,19 @@ public:
     llvm::cl::cat(SbtCategory),
     llvm::cl::desc("Input binary file name")
   };
+
+  inline static llvm::cl::opt<std::string> OutputObject {
+    "o",
+    llvm::cl::init("translated.o"),
+    llvm::cl::cat(SbtCategory),
+    llvm::cl::desc("Output translated object file")
+  };
+
+  inline static llvm::cl::opt<bool> Quiet {
+    "quiet",
+    llvm::cl::init(false),
+    llvm::cl::cat(SbtCategory),
+    llvm::cl::desc("Suppress disassembly and intermediate IR output")
+  };
 };
 }

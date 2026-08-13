@@ -8,6 +8,8 @@
 //
 #include "X86HeaderGenerator.h"
 
+#include "llvm/ADT/StringSwitch.h"
+
 using namespace llvm;
 using namespace z8;
 using namespace std;
@@ -33,6 +35,15 @@ void X86HeaderGenerator::run(llvm::raw_ostream &OS) const {
     if (!OpcodeName.starts_with("ADD")) continue;
 
     string ClassName = "X86_" + OpcodeName.str() + "_IR1Converter";
+    bool HasImplementation = StringSwitch<bool>(OpcodeName)
+      .Cases({"ADD64rr", "ADD32rr", "ADD16rr", "ADD8rr"}, true)
+      .Cases({"ADD64ri8", "ADD32ri8", "ADD16ri8", "ADD8ri8"}, true)
+      .Cases({"ADD8ri", "ADD8i8", "ADD16i16", "ADD32i32"}, true)
+      .Case("ADD64i32", true)
+      .Cases({"ADD64rm", "ADD32rm", "ADD16rm", "ADD8rm"}, true)
+      .Cases({"ADD64mr", "ADD32mr", "ADD16mr", "ADD8mr"}, true)
+      .Cases({"ADD64mi8", "ADD32mi", "ADD16mi", "ADD8mi"}, true)
+      .Default(false);
     OS <<
       "class " << ClassName << " : public BaseIR1Converter {\n"
       "public:\n"
@@ -41,12 +52,18 @@ void X86HeaderGenerator::run(llvm::raw_ostream &OS) const {
       "    MID = &getX86Machine().getMII().get(Opcode);\n"
       "  }\n"
       "  std::string getName() const override { return \"" << OpcodeName << "\"; }\n"
-      "  // void op(ConversionContext&) override; \n"
       "  static " << ClassName << "& Instance() {\n"
       "    static " << ClassName << " _;\n"
       "    return _;\n"
-      "  }\n"
-      "};\n\n";
+      "  }\n";
+    if (HasImplementation)
+      OS << "  void op(ConversionContext&) override;\n";
+    if (StringSwitch<bool>(OpcodeName)
+          .Cases({"ADD8i8", "ADD16i16", "ADD32i32", "ADD64i32"}, true)
+          .Default(false))
+      OS << "  void loadSrcOperand(ConversionContext&) override;\n"
+            "  void storeDstOperand(ConversionContext&) override;\n";
+    OS << "};\n\n";
   }
 
   OS << "}\n";

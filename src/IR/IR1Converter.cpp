@@ -4,6 +4,7 @@
 //
 #include "IR/IR1Converter.h"
 #include "IR/IR1.h"
+#include "Support/Option.h"
 #include <IR/IR0.h>
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrDesc.h"
@@ -28,7 +29,9 @@ BaseIR1Converter::BaseIR1Converter() {}
 BaseIR1Converter::~BaseIR1Converter() {}
 
 void BaseIR1Converter::op(ConversionContext &) {
-  dbgs() << getName() << " converter is not impl yet!\n";
+  Ctx->markConversionFailure();
+  if (!Option::Quiet)
+    dbgs() << getName() << " converter is not impl yet!\n";
 }
 
 void z8::BaseIR1Converter::loadSrcOperand(ConversionContext& CC) {
@@ -42,8 +45,14 @@ void z8::BaseIR1Converter::loadSrcOperand(ConversionContext& CC) {
       CC.Src.push_back(ci);
     }
     if (Op.isReg()) {
-      auto v = ir1::LoadRegOp::create(Ctx->Builder, loc, Op.getReg());
-      CC.Src.push_back(v);
+      if (Op.getReg() == 0) {
+        auto zero = ir1::ConstIntOp::create(Ctx->Builder, loc, 0);
+        CC.Src.push_back(zero);
+      } else {
+        auto v = ir1::LoadRegOp::create(Ctx->Builder, loc, Ctx->getState(),
+                                        Op.getReg());
+        CC.Src.push_back(v);
+      }
     }
   }
 }
@@ -54,18 +63,23 @@ void z8::BaseIR1Converter::storeDstOperand(ConversionContext& CC) {
     const MCOperand &Op = CC.IR.Inst.getOperand(i);
     if (!Op.isReg()) continue;
     assert (i < CC.Dst.size());
-    ir1::StoreRegOp::create(Ctx->Builder, loc, CC.Dst[i], Op.getReg());
+    ir1::StoreRegOp::create(Ctx->Builder, loc, Ctx->getState(), CC.Dst[i],
+                            Op.getReg());
   }
   for (unsigned i = 0; i < CC.ImplicitOperand.size(); ++i) {
     auto reg = CC.ImplicitOperand[i];
-    ir1::StoreRegOp::create(Ctx->Builder, loc, CC.ImplicitDst[i], reg);
+    ir1::StoreRegOp::create(Ctx->Builder, loc, Ctx->getState(),
+                            CC.ImplicitDst[i], reg);
   }
 }
 
 void BaseIR1Converter::run(const IR0& IR) {
   ConversionContext CC(IR);
-  IR.Inst.dump();
+  if (!Option::Quiet)
+    IR.Inst.dump();
   loadSrcOperand(CC);
   op(CC);
+  if (Ctx->hasConversionFailed())
+    return;
   storeDstOperand(CC);
 }

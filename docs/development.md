@@ -8,8 +8,8 @@
 - C++17 编译器；
 - Ninja（README 中的 LLVM 构建方式使用 Ninja）；
 - LLVM 与 MLIR；仓库当前约定源码位于 `third/llvm`，构建目录为 `third/llvm/build`；
-- NASM，用于汇编 `tests/arith/add` 中的样例；
-- GoogleTest 子模块已经存在，但当前主工程尚未建立测试目标。
+- NASM，用于汇编 `tests/isa/x86` 中的指令 fixture；
+- GoogleTest，用于 lowering 和目标发射单元测试。
 
 README 记录的 LLVM 基线为 `llvmorg-22.1.5`，配置时启用 `llvm;mlir` 项目和 `X86;RISCV` targets。当前代码实际只实现了 x86 machine 选择。
 
@@ -31,28 +31,20 @@ cmake --build cmake-build-debug -j 12
 
 ## 3. 运行
 
-当前唯一必需参数是输入目标文件：
+`sbt` 的输入是目标文件，`-o` 指定翻译后的目标文件：
 
 ```sh
-./cmake-build-debug/sbt -i tests/arith/add/main
+./build/sbt -i input.o -o translated.o
 ```
-
-生成 ADD 样例可执行：
-
-```sh
-cd tests/arith/add
-./run.sh
-```
-
-注意：`run.sh` 当前固定汇编 `ADDri.asm` 并把 ELF relocatable object 命名为 `main`。该名称不是可执行文件的保证；`sbt` 当前只是读取其中的代码 section。
 
 当前程序会依次向输出流打印：
 
 - IR0 反汇编；
 - 提升后的 IR1 module；
-- 执行 partial lowering 后的 module。
+- 完整 lowering 后的 LLVM Dialect module。
 
-它不会写出 LLVM IR、目标文件或可执行程序。
+随后通过 LLVM TargetMachine 写出 `-o` 指定的 relocatable object。测试构建使用
+`--quiet` 关闭中间打印。
 
 ## 4. 添加一条 x86 指令语义
 
@@ -75,25 +67,14 @@ cd tests/arith/add
 - 内存副作用、异常和控制流；
 - 不支持变体的确定性错误。
 
-## 5. 当前测试与建议布局
+## 5. 当前测试
 
-现有 `tests/arith/add` 是汇编输入集合，尚未接入 CTest，也没有断言预期结果。建议演进为：
+`tests/isa/x86/<instruction>/<case>` 已接入 CTest。每个用例使用同一份 TOML
+状态分别运行宿主原生指令和 `sbt` 发射的 `translated_block`。详细目录契约、
+状态 ABI、比较规则和运行命令见[指令测试流程](testing.md)。
 
-```text
-tests/
-  unit/                 # IR builder、寄存器别名、flags 公式
-  lift/                 # 汇编 → 期望 IR1/FileCheck
-  lower/                # IR1 → LLVM Dialect/LLVM IR
-  differential/         # 原始代码与翻译代码状态对比
-  negative/             # 非法文件、decode fail、unsupported opcode
-```
-
-测试层次：
-
-- 单元测试检查纯语义函数；
-- FileCheck 风格测试检查 IR 结构，不依赖 SSA 临时名；
-- 差分测试检查真实执行结果；
-- fuzz 测试在已声明支持的 opcode/operand 范围内随机生成输入。
+此外，`sbt-unit` 使用 GoogleTest 检查 lowering、寄存器别名、flags 公式和目标
+文件发射。指令 fixture 是端到端验证，不能由手工构造 IR 的单元测试替代。
 
 ## 6. 已知技术债
 
@@ -103,15 +84,11 @@ tests/
 - `getMachine` 对非 x86 triple 没有明确失败路径；
 - `File::disas()` 线性扫描所有 text section，忽略符号、relocation 和代码/数据边界；
 - decode fail 仅跳过一个字节；
-- 未支持 opcode 静默跳过；
-- `BaseIR1Converter::run()` 无条件 dump `MCInst`，缺少可控日志级别；
+- `convertMCInst` 对完全没有分派 case 的 opcode 仍缺少统一的 unsupported 诊断；
 - IR1 的整数类型约束过宽，builder 又固定使用 i32/i64；
 - IR1 操作没有完整 verifier、side effect interface 和 traits；
-- `IR1Context::lower()` 忽略 PassManager 返回值；
-- `IR1Context::verify()` 只打印错误，主流程也没有调用它；
-- lowering 仅处理整数常量，且使用 partial conversion；
-- module 没有函数、region 中的真实 CFG 和 terminator；
-- CMake 尚未配置 LLVM Dialect 到 LLVM IR 的 translation 与目标发射。
+- module 当前只有单个 `translated_block`，尚没有从输入恢复的真实 CFG；
+- translated block state ABI 仅覆盖 GPR 和 RFLAGS，尚未覆盖完整控制流和异常状态。
 
 ## 7. 修改约定
 
@@ -120,4 +97,3 @@ tests/
 - 新增 opcode 时更新支持矩阵，禁止无声忽略；
 - 不提交由构建产生的样例 object 或生成文件；
 - 先建立一个端到端纵向切片，再批量扩展 opcode。
-

@@ -11,6 +11,23 @@ using namespace mlir;
 using namespace z8;
 
 namespace {
+Value MemoryAddress(ConversionContext &CC, size_t offset = 0) {
+  assert(CC.Src.size() >= offset + 5);
+  static IR1Context *Ctx = &IR1Context::Instance();
+  auto loc = CC.getNameLoc();
+  auto i64 = Ctx->iTy();
+  // LLVM's x86 memory operand is base + scale * index + displacement + segment.
+  auto scaledIndex = ir1::MulIOp::create(Ctx->Builder, loc, i64,
+                                         CC.Src[offset + 1],
+                                         CC.Src[offset + 2]);
+  auto address = ir1::AddIOp::create(Ctx->Builder, loc, i64,
+                                     CC.Src[offset], scaledIndex);
+  address = ir1::AddIOp::create(Ctx->Builder, loc, i64,
+                                CC.Src[offset + 3], address);
+  return ir1::AddIOp::create(Ctx->Builder, loc, i64,
+                             CC.Src[offset + 4], address);
+}
+
 void AddOp(ConversionContext& CC, int width, IntegerType::SignednessSemantics signedness = IntegerType::Signless) {
   assert(CC.Src.size() >= 2);
   static IR1Context* Ctx = &IR1Context::Instance();
@@ -28,12 +45,8 @@ void AddOp(ConversionContext& CC, int width, IntegerType::SignednessSemantics si
     //  0  + [ 1 + 2 * 3 + 4 + 5]
     // eax    rbx  4  rsi  8  fs
     case 6: {
-      auto i64 = Ctx->iTy();
-      auto t0 = ir1::MulIOp::create(Ctx->Builder, loc, i64, CC.Src[2], CC.Src[3]);
-      auto t1 = ir1::AddIOp::create(Ctx->Builder, loc, i64, CC.Src[1], t0);
-      auto t2 = ir1::AddIOp::create(Ctx->Builder, loc, i64, CC.Src[4], t1);
-      auto t3 = ir1::AddIOp::create(Ctx->Builder, loc, i64, CC.Src[5], t2);
-      auto t4 = ir1::LoadOp::create(Ctx->Builder, loc, i64, t3);
+      auto address = MemoryAddress(CC, 1);
+      auto t4 = ir1::LoadOp::create(Ctx->Builder, loc, resTy, address);
       op = ir1::X86AddIOp::create(Ctx->Builder, loc, type, CC.Src[0],t4);
       break;
     }
@@ -43,6 +56,37 @@ void AddOp(ConversionContext& CC, int width, IntegerType::SignednessSemantics si
   CC.Dst.push_back(op.getRes());
   CC.ImplicitDst.push_back(op.getFlags());
   CC.ImplicitOperand.emplace_back(llvm::X86::RFLAGS);
+}
+
+void AddMemoryDestinationOp(ConversionContext &CC, int width) {
+  assert(CC.Src.size() == 6);
+  static IR1Context *Ctx = &IR1Context::Instance();
+  auto loc = CC.getNameLoc();
+  auto resultType = Ctx->iTy(width);
+  auto address = MemoryAddress(CC);
+  auto lhs = ir1::LoadOp::create(Ctx->Builder, loc, resultType, address);
+  TypeRange resultTypes{resultType, Ctx->iTy()};
+  auto add = ir1::X86AddIOp::create(Ctx->Builder, loc, resultTypes, lhs,
+                                    CC.Src[5]);
+  ir1::StoreOp::create(Ctx->Builder, loc, add.getRes(), address);
+  CC.ImplicitDst.push_back(add.getFlags());
+  CC.ImplicitOperand.emplace_back(llvm::X86::RFLAGS);
+}
+
+void LoadAccumulator(ConversionContext &CC, unsigned reg) {
+  auto loc = CC.getNameLoc();
+  CC.Src.push_back(ir1::LoadRegOp::create(BaseIR1Converter::Ctx->Builder, loc,
+                                          BaseIR1Converter::Ctx->getState(),
+                                          reg));
+}
+
+void StoreAccumulator(ConversionContext &CC, unsigned reg) {
+  auto loc = CC.getNameLoc();
+  ir1::StoreRegOp::create(BaseIR1Converter::Ctx->Builder, loc,
+                          BaseIR1Converter::Ctx->getState(), CC.Dst[0], reg);
+  ir1::StoreRegOp::create(BaseIR1Converter::Ctx->Builder, loc,
+                          BaseIR1Converter::Ctx->getState(),
+                          CC.ImplicitDst[0], llvm::X86::RFLAGS);
 }
 }
 
@@ -83,17 +127,34 @@ void X86_ADD8ri_IR1Converter::op(ConversionContext& CC) {
 // <MCInst 681 <MCOperand Imm:1>>
 void X86_ADD8i8_IR1Converter::loadSrcOperand(ConversionContext &CC) {
   BaseIR1Converter::loadSrcOperand(CC);
-  auto loc = CC.getNameLoc();
-  auto v = ir1::LoadRegOp::create(Ctx->Builder, loc, llvm::X86::AL);
-  CC.Src.push_back(v);
+  LoadAccumulator(CC, llvm::X86::AL);
 }
 void X86_ADD8i8_IR1Converter::storeDstOperand(ConversionContext &CC) {
-  auto loc = CC.getNameLoc();
-  ir1::StoreRegOp::create(Ctx->Builder, loc, CC.Dst[0], llvm::X86::AL);
+  StoreAccumulator(CC, llvm::X86::AL);
 }
 void X86_ADD8i8_IR1Converter::op(ConversionContext& CC) {
   AddOp(CC, 8);
 }
+
+#define DEFINE_ACCUMULATOR_ADD(WIDTH, OPCODE_SUFFIX, REGISTER)                \
+  void X86_ADD##OPCODE_SUFFIX##_IR1Converter::loadSrcOperand(                 \
+      ConversionContext &CC) {                                                \
+    BaseIR1Converter::loadSrcOperand(CC);                                     \
+    LoadAccumulator(CC, llvm::X86::REGISTER);                                \
+  }                                                                           \
+  void X86_ADD##OPCODE_SUFFIX##_IR1Converter::storeDstOperand(                \
+      ConversionContext &CC) {                                                \
+    StoreAccumulator(CC, llvm::X86::REGISTER);                               \
+  }                                                                           \
+  void X86_ADD##OPCODE_SUFFIX##_IR1Converter::op(ConversionContext &CC) {     \
+    AddOp(CC, WIDTH);                                                         \
+  }
+
+DEFINE_ACCUMULATOR_ADD(16, 16i16, AX)
+DEFINE_ACCUMULATOR_ADD(32, 32i32, EAX)
+DEFINE_ACCUMULATOR_ADD(64, 64i32, RAX)
+
+#undef DEFINE_ACCUMULATOR_ADD
 
 
 // ADDrm
@@ -108,4 +169,31 @@ void X86_ADD16rm_IR1Converter::op(ConversionContext& CC) {
 }
 void X86_ADD8rm_IR1Converter::op(ConversionContext& CC) {
   AddOp(CC, 8);
+}
+
+// ADDmr and ADDmi both use a memory destination. The sixth source is either
+// the register or immediate added to the loaded memory value.
+void X86_ADD64mr_IR1Converter::op(ConversionContext &CC) {
+  AddMemoryDestinationOp(CC, 64);
+}
+void X86_ADD32mr_IR1Converter::op(ConversionContext &CC) {
+  AddMemoryDestinationOp(CC, 32);
+}
+void X86_ADD16mr_IR1Converter::op(ConversionContext &CC) {
+  AddMemoryDestinationOp(CC, 16);
+}
+void X86_ADD8mr_IR1Converter::op(ConversionContext &CC) {
+  AddMemoryDestinationOp(CC, 8);
+}
+void X86_ADD64mi8_IR1Converter::op(ConversionContext &CC) {
+  AddMemoryDestinationOp(CC, 64);
+}
+void X86_ADD32mi_IR1Converter::op(ConversionContext &CC) {
+  AddMemoryDestinationOp(CC, 32);
+}
+void X86_ADD16mi_IR1Converter::op(ConversionContext &CC) {
+  AddMemoryDestinationOp(CC, 16);
+}
+void X86_ADD8mi_IR1Converter::op(ConversionContext &CC) {
+  AddMemoryDestinationOp(CC, 8);
 }

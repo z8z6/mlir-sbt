@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.31)
 project(sbt)
 
+include(CTest)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -42,12 +44,17 @@ add_subdirectory(mlir)
 file(GLOB_RECURSE SOURCE_FILES
         src/*.cpp
         include/*.h
-        ${CMAKE_BINARY_DIR}/tblgen/*.cpp
-        ${CMAKE_BINARY_DIR}/tblgen/*.h
 )
-add_executable(sbt ${SOURCE_FILES} )
+list(APPEND SOURCE_FILES
+        ${CMAKE_BINARY_DIR}/tblgen/X86IR1Converter.cpp
+        ${CMAKE_BINARY_DIR}/tblgen/X86IR1Converter.h
+)
+list(REMOVE_ITEM SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp)
+add_library(sbt-lib STATIC ${SOURCE_FILES})
+add_dependencies(sbt-lib ir1-mlir-gen ir1-x86-converter-gen)
+add_executable(sbt src/main.cpp)
 
-target_include_directories(sbt PUBLIC
+target_include_directories(sbt-lib PUBLIC
         include
         ${CMAKE_BINARY_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/third/llvm/build/lib/Target/X86
@@ -70,6 +77,9 @@ llvm_map_components_to_libnames(LLVM_LIBS
         Analysis
         Object
         IRReader
+        ExecutionEngine
+        OrcJIT
+        native
         AsmParser
         BitReader
         TargetParser
@@ -81,15 +91,28 @@ set(MLIR_LIBS
         MLIRParser
         MLIRDialect
         MLIRArithDialect
+        MLIRArithToLLVM
+        MLIRFuncDialect
+        MLIRFuncToLLVM
+        MLIRLLVMDialect
+        MLIRLLVMCommonConversion
+        MLIRLLVMToLLVMIRTranslation
+        MLIRTargetLLVMIRExport
+        MLIRExecutionEngine
         MLIRMemRefDialect
         MLIRTransformUtils
 )
 
 
-target_link_libraries(sbt ${LLVM_LIBS} ${MLIR_LIBS})
+target_link_libraries(sbt-lib PUBLIC ${LLVM_LIBS} ${MLIR_LIBS})
+target_link_libraries(sbt PRIVATE sbt-lib)
 
-set_target_properties(sbt PROPERTIES
+set_target_properties(sbt-lib sbt PROPERTIES
         CXX_STANDARD 17
         CXX_STANDARD_REQUIRED ON
         COMPILE_FLAGS "-fno-rtti" # 关闭RTTI
 )
+
+if(BUILD_TESTING)
+  add_subdirectory(tests)
+endif()

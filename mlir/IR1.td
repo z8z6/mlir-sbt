@@ -35,20 +35,20 @@ def ConstFloatOp : IR1_Op<"cf"> {
 }
 
 def LoadRegOp : IR1_Op<"load_reg"> {
-  let arguments = (ins AnyAttr:$reg_id);
+  let arguments = (ins AnyType:$state, AnyAttr:$reg_id);
   let results = (outs AnyType:$res);
   let builders = [
-    OpBuilder<(ins "unsigned":$reg_id)>
+    OpBuilder<(ins "mlir::Value":$state, "unsigned":$reg_id)>
   ];
-  let assemblyFormat = "attr-dict `:` type($res)";
+  let assemblyFormat = "attr-dict $state `:` type($state) `->` type($res)";
 }
 
 def StoreRegOp : IR1_Op<"store_reg"> {
-  let arguments = (ins AnyType:$value, AnyAttr:$reg_id);
+  let arguments = (ins AnyType:$state, AnyType:$value, AnyAttr:$reg_id);
   let builders = [
-    OpBuilder<(ins "mlir::Value":$value, "unsigned":$reg_id)>
+    OpBuilder<(ins "mlir::Value":$state, "mlir::Value":$value, "unsigned":$reg_id)>
   ];
-  let assemblyFormat = "attr-dict $value `:` type($value)";
+  let assemblyFormat = "attr-dict $state `,` $value `:` type($state) `,` type($value)";
 }
 
 def LoadOp : IR1_Op<"load"> {
