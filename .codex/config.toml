@@ -1,0 +1,22 @@
+[agents]
+max_concurrent_threads_per_session = 6
+
+[agents.explorer]
+description = "Read-only repository explorer that produces evidence for architecture design."
+config_file = "agents/explorer.toml"
+
+[agents.arch]
+description = "Read-only architect that turns explorer evidence into an implementation-ready proposal."
+config_file = "agents/arch.toml"
+
+[agents.arch-critic]
+description = "Read-only adversarial architecture critic that gates implementation."
+config_file = "agents/arch-critic.toml"
+
+[agents.worker]
+description = "Implementation agent that may edit only after architecture approval."
+config_file = "agents/worker.toml"
+
+[agents.reviewer]
+description = "Independent read-only reviewer that gates feature completion."
+config_file = "agents/reviewer.toml"
