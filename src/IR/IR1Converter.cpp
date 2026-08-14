@@ -5,22 +5,25 @@
 #include "IR/IR1Converter.h"
 #include "IR/IR1.h"
 #include "IR/X86.h"
-#include "Support/Option.h"
+#include "Target/X86Register.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrDesc.h"
-#include "llvm/Support/Debug.h"
 #include <IR/IR0.h>
 
 using namespace llvm;
 using namespace mlir;
 using namespace z8;
 
-ConversionContext::ConversionContext(const IR0 &IR) : IR(IR) {}
+ConversionContext::ConversionContext(const IR0 &IR, Block *branchTarget,
+                                     Block *fallthrough)
+    : IR(IR), BranchTarget(branchTarget), Fallthrough(fallthrough) {}
 
 NameLoc ConversionContext::getNameLoc() const {
-  static IR1Context *Ctx = &IR1Context::Instance();
-  auto name = StringAttr::get(&Ctx->Ctx, IR.str());
-  return NameLoc::get(name);
+  MLIRContext *context = &BaseIR1Converter::Ctx->Ctx;
+  NameLoc instruction = NameLoc::get(StringAttr::get(context, IR.str()));
+  if (IR.FunctionName.empty())
+    return instruction;
+  return NameLoc::get(StringAttr::get(context, IR.FunctionName), instruction);
 }
 
 IR1Context *BaseIR1Converter::Ctx = &IR1Context::Instance();
@@ -31,8 +34,6 @@ BaseIR1Converter::~BaseIR1Converter() {}
 
 void BaseIR1Converter::op(ConversionContext &) {
   Ctx->markConversionFailure();
-  if (!Option::Quiet)
-    dbgs() << getName() << " converter is not impl yet!\n";
 }
 
 void z8::BaseIR1Converter::loadSrcOperand(ConversionContext &CC) {
@@ -51,6 +52,10 @@ void z8::BaseIR1Converter::loadSrcOperand(ConversionContext &CC) {
         auto zero = ir1::ConstIntOp::create(Ctx->Builder, loc, 0);
         CC.Src.push_back(zero);
       } else {
+        if (!getX86RegisterDesc(Op.getReg())) {
+          Ctx->markConversionFailure();
+          return;
+        }
         auto v = x86ir::ReadRegOp::create(Ctx->Builder, loc, Ctx->getState(),
                                           Op.getReg());
         CC.Src.push_back(v);
@@ -65,6 +70,10 @@ void z8::BaseIR1Converter::storeDstOperand(ConversionContext &CC) {
     const MCOperand &Op = CC.IR.Inst.getOperand(i);
     if (!Op.isReg())
       continue;
+    if (!getX86RegisterDesc(Op.getReg())) {
+      Ctx->markConversionFailure();
+      return;
+    }
     assert(i < CC.Dst.size());
     x86ir::WriteRegOp::create(Ctx->Builder, loc, Ctx->getState(), CC.Dst[i],
                               Op.getReg());
@@ -76,11 +85,12 @@ void z8::BaseIR1Converter::storeDstOperand(ConversionContext &CC) {
   }
 }
 
-void BaseIR1Converter::run(const IR0 &IR) {
-  ConversionContext CC(IR);
-  if (!Option::Quiet)
-    IR.Inst.dump();
+void BaseIR1Converter::run(const IR0 &IR, Block *branchTarget,
+                           Block *fallthrough) {
+  ConversionContext CC(IR, branchTarget, fallthrough);
   loadSrcOperand(CC);
+  if (Ctx->hasConversionFailed())
+    return;
   op(CC);
   if (Ctx->hasConversionFailed())
     return;

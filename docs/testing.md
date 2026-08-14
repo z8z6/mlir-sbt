@@ -79,6 +79,13 @@ flag。对于 ADD，CF、PF、AF、ZF、SF、OF 检查计算结果，TF、IF、D
 窄写入仍比较完整 64 位槽，因此可以检查目标字节或字之外的内容是否保持。
 `rdi = "memory_base"` 由 runner 替换为能使 `rdi+24` 指向该槽的实际地址。
 
+### 3.4 XMM 与 x87
+
+SSE fixture 可使用 `[vectors]` 表，以 128 位十六进制位模式描述 XMM0-XMM15。
+x87 fixture 使用 `[x87]` 表，必须完整列出 ST0-ST7，每项为精确的 80 位扩展
+精度位模式。弹栈指令会让 ST1-ST7 向低逻辑编号移动，只有新空出的 ST7 可在
+输出中写 `"ignore"`。当前不比较 x87 control/status/tag word 和物理 TOP。
+
 ## 4. 原生基准路径
 
 CMake 为每个 case 建立一个原生测试程序，由以下文件组成：
@@ -91,9 +98,9 @@ fixture_runner.cpp + fixture_executor.asm + case.asm
 
 1. `fixture_runner.cpp` 读取并验证两个 TOML，初始化测试内存；
 2. `fixture_executor.asm` 保存宿主 ABI 要求保持的寄存器；
-3. executor 装载输入 GPR 和 EFLAGS，并采集运行时拥有的 RSP、RIP、段寄存器；
+3. executor 装载输入 GPR、EFLAGS、XMM 和完整 x87 逻辑栈，并采集运行时拥有的 RSP、RIP、段寄存器；
 4. executor 调用 `run_case`，在宿主 CPU 上执行被测指令；
-5. executor 保存全部 GPR、EFLAGS 和段寄存器，然后恢复宿主状态；
+5. executor 保存全部 GPR、EFLAGS、XMM、x87 逻辑栈和段寄存器，然后恢复宿主状态；
 6. runner 按 `output.toml` 比较寄存器、各 flag 和内存。
 
 对应的 CTest 名称为：
@@ -139,11 +146,11 @@ ELF Object
 extern "C" void translated_block(uint64_t *state);
 ```
 
-当前 guest state ABI 是 16 个 64 位 GPR 槽，随后是一个 RFLAGS 槽。runner 将
-TOML 输入复制到该状态数组，调用 `translated_block`，再把结果映射回统一的
-fixture 状态进行比较。ADD 不修改段寄存器；这些字段在翻译路径中按输入值
-保持。RIP、RSP 当前不属于 translated block 的可观察控制流输出，仍按 schema
-忽略。
+当前 guest state ABI 共 65 个 64 位槽：16 个 GPR、一个 RFLAGS、16 个双槽
+XMM，以及八个双槽 x87 80 位逻辑栈值。runner 将 TOML 输入复制到该状态数组，
+调用 `translated_block`，再映射回统一的 fixture 状态进行比较。段寄存器在翻译
+路径中按输入值保持；RIP、RSP 当前不属于 translated block 的可观察控制流
+输出，仍按 schema 忽略。
 
 对应的 CTest 名称为：
 
@@ -169,7 +176,34 @@ runner 对输出值支持三种写法：
 - 每个 ISA case 的 1 个原生测试；
 - 每个 ISA case 的 1 个静态翻译测试。
 
-当前 30 个 ADD case 和 32 个 SUB case，加上 `sbt-unit`，共有 125 条 CTest。
+legacy SSE CVT 家族包含 44 个 case、88 个 CTest，覆盖每个实际解码的 rr/rm
+形式、32/64 位整数目标/源、packed lane 顺序、nearest-even 与 `CVTT*` 向零
+截断，以及 legacy scalar XMM 高位保留和 packed 窄结果高位清零。
+
+x87 算术家族包含 42 个 case、84 个 CTest，覆盖 FADD/FSUB/FSUBR/FMUL/
+FDIV/FDIVR 的寄存器、m32fp、m64fp、弹栈形式，以及 FI* 的 m16int/m32int
+形式，并逐位比较 80 位结果和弹栈后的逻辑顺序。
+
+CALL fixture 覆盖 `CALL64r` 和 `CALL64m`。runner 将 `"call_target"` 解析为
+一个保留 flags、返回 `RDI+24` 的 SysV helper 地址，使原生路径和翻译路径可以
+比较间接目标读取、六个整数参数、RAX 返回值及内存目标槽保持。
+
+`tests/mini/x86/<name>/` 另用于完整 ELF 程序。每个 mini case 至少提供
+`program.asm` 或 freestanding `program.c`，以及 `expected.txt`，并可选提供
+`data.asm`。C 源码使用 GCC 编译，最终统一由 `ld -static` 链接。构建会分别生成原生程序和
+链接了 translated object、launcher、syscall runtime 的翻译程序；两者都必须
+运行，并与 `expected.txt` 做逐字节 stdout 比较。`hello_world` 覆盖 Linux
+`write` 与 `exit` syscall，不再使用预期失败标记。
+
+`hello_world_glibc` 是动态链接例外：原生程序严格使用默认
+`gcc program.c -o program`，翻译时从 ELF 符号表选择 `main`，从 PLT 重定位
+解析 `puts`，再把 translated object 链入一个使用系统 glibc 的非 PIE
+launcher。该测试同时覆盖函数边界、PIE 地址 bias、PUSH/POP/LEA 和外部 CALL。
+
+`multi_function` 包含独立的 `_start` 与 `helper` 两个 `STT_FUNC`，不使用
+`--function` 过滤。测试要求翻译目标同时包含兼容入口 `translated_block` 和
+保留原名的 `_start`、`helper`，从而覆盖“发现所有函数、逐函数建 CFG、逐函数翻译”
+的完整 ELF 路径。
 
 ## 7. 运行测试
 
@@ -202,10 +236,21 @@ python3 .agents/skills/x86-instruction-test/scripts/validate_cases.py \
 添加用例时可以使用仓库内的 `x86-instruction-test` skill 及其脚手架；它会生成
 完整寄存器/flags 模板，并拒绝 ADD 目录中出现其他 opcode。
 
+审计真实 ELF（包括已剥离共享库的动态函数符号）中出现的 LLVM MC opcode：
+
+```sh
+build/sbt -i /usr/lib/libc.so.6 --audit-opcodes
+```
+
+输出逐项标记 `supported`/`missing`，末行汇总指令实例数和不同 opcode 数。
+`RET64` 由 CFG 构造器处理，也计入 supported；`LOCK_PREFIX` 虽可解码，但在
+原子内存语义完成前仍保留为 missing。
+
 ## 8. 当前边界
 
 - 原生基准要求测试主机为 x86-64，并且支持被测编码。
-- 当前内存模型只暴露 `rdi+24` 测试槽，尚不是通用 guest address space。
+- 当前内存模型暴露 `rdi+24` 到 `rdi+80` 的对齐测试槽，可验证 128 位连续
+  读取，但尚不是通用 guest address space。
 - translated block ABI 尚未建模 RIP、段基址、异常和控制流退出原因。
 - `lock add` 当前只验证单线程结果、flags 和内存值，不能证明并发原子性；原子性
   需要多线程竞争测试以及 IR/LLVM 原子操作语义。

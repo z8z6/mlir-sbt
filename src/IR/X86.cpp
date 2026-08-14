@@ -23,3 +23,9 @@ void ReadRegOp::build(OpBuilder &builder, OperationState &state,
 
 #define GET_OP_CLASSES
 #include "mlir/X86Ops.cpp.inc"
+
+LogicalResult ConditionOp::verify() {
+  if (getCondition() > 15)
+    return emitOpError("condition code must be in the range [0, 15]");
+  return success();
+}

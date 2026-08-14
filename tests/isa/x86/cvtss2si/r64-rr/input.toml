@@ -1,0 +1,43 @@
+[registers]
+rax = 0x1111111111111111
+rbx = 0x2222222222222222
+rcx = 0xfffffffffffffffd
+rdx = 0x4444444444444444
+rsi = 0x5555555555555555
+rdi = "memory_base"
+rbp = 0x7777777777777777
+rsp = "runtime"
+r8 = 0x9999999999999999
+r9 = 0xaaaaaaaaaaaaaaaa
+r10 = 0xbbbbbbbbbbbbbbbb
+r11 = 0xcccccccccccccccc
+r12 = 0xdddddddddddddddd
+r13 = 0xeeeeeeeeeeeeeeee
+r14 = 0xffffffffffffffff
+r15 = 0x1111111111111110
+rip = "run_case"
+eflags = 0x202
+cs = "runtime"
+ss = "runtime"
+ds = "runtime"
+es = "runtime"
+fs = "runtime"
+gs = "runtime"
+
+[flags]
+cf = 0
+pf = 0
+af = 0
+zf = 0
+sf = 0
+tf = 0
+if = 1
+df = 0
+of = 0
+
+[memory]
+"rdi+24" = 0x000000003fe00000
+
+[vectors]
+xmm0 = "0x112233445566778899aabbccddeeff00"
+xmm1 = "0x8877665544332211000000003fe00000"

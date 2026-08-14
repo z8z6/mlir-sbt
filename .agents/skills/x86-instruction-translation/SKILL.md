@@ -27,9 +27,11 @@ class or a successfully emitted object does not prove semantic support.
    Lower `X86_Dialect` to architecture-neutral primitive IR1 operations first;
    IR1 lowering must not depend on X86 op classes. Add both lowering stages in
    the same change.
-6. Put mnemonic dispatch in `src/Trans/X86/<MNEMONIC>.cpp`. Before adding
-   operand decoding, address construction, state access, or flag calculation,
-   inspect `include/Trans/X86` and `src/Trans/X86` for a reusable family helper.
+6. Put mnemonic dispatch in the matching semantic-family file under
+   `src/Trans/X86/` (`Arithmetic.cpp`, `Logical.cpp`, `Move.cpp`,
+   `Conditional.cpp`, `ControlFlow.cpp`, and so on). Before adding operand
+   decoding, address construction, state access, or flag calculation, inspect
+   `include/Trans/X86` and `src/Trans/X86` for a reusable family helper.
    Related instructions such as ADD/SUB must share operand and lowering
    skeletons while retaining their distinct arithmetic formulas.
 7. Preserve the register-state ABI and alias rules: 32-bit writes zero extend;
@@ -50,7 +52,7 @@ class or a successfully emitted object does not prove semantic support.
 
 - Opcode class generation: `tblgen/src/X86HeaderGenerator.cpp`
 - Opcode dispatch generation: `tblgen/src/X86ImplGenerator.cpp`
-- X86 family translators: `src/Trans/X86/<MNEMONIC>.cpp`
+- X86 family translators: semantic-family files in `src/Trans/X86/`
 - Shared X86 translation helpers: `include/Trans/X86/`,
   `src/Trans/X86/Common.cpp`
 - Shared arithmetic-family translation: `src/Trans/X86/Arithmetic.cpp`

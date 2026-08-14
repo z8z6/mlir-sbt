@@ -15,18 +15,38 @@ IR1 不应复制完整 LLVM IR，也不应包含以 x86 指令命名或绑定 x8
 
 ### 2.1 当前结构
 
-当前 `IR0` 只有两个字段：
+IR0 已按程序、函数、CFG、基本块和指令分层：
 
-```cpp
-uint64_t Addr;
-llvm::MCInst Inst;
+```text
+IR0Context
+  Functions[] : IR0Function
+  EntryFunctionIndex
+
+IR0Function
+  Name / Aliases / Address / Size / SectionIndex
+  IRs[] : IR0
+  CFG : IR0CFG
+
+IR0CFG
+  Blocks[] : IR0BasicBlock
+
+IR0BasicBlock
+  Address / [BeginIndex, EndIndex) / Reachable
+  Successors[] : {Branch|Fallthrough, TargetAddress, optional TargetBlock}
+
+IR0
+  Addr / Size / SectionIndex / AddressBias
+  ExternalSymbol
+  llvm::MCInst
 ```
 
-`IR0Context` 使用 `std::vector<IR0>` 保存反汇编结果。这足够验证 opcode 分派，却不足以支撑 CFG、重定位或精确诊断。
+基本块引用函数内连续的指令索引范围，不复制 `MCInst`。直接分支目标在函数内
+可解析时记录 `TargetBlock`；函数外或尚未发现的目标保留地址并标为 unresolved。
+可达性从函数入口块沿已解析的边计算，IR1 翻译只生成可达块。
 
-### 2.2 建议结构
+### 2.2 后续补充
 
-建议逐步补充：
+为支持更完整的重定位、诊断和代码发现，还应逐步补充：
 
 ```text
 DecodedInst
@@ -52,17 +72,24 @@ IR0 的不变量：
 
 ### 3.1 当前 Dialect 分层
 
-`mlir/X86.td` 当前定义 `x86.addi/subi/andi/ori/xori` 和 legacy scalar FP 操作，用来封装 flags 与 XMM 高位保留等 x86 专属语义。`mlir/IR1.td` 当前定义：
+`mlir/X86.td` 当前定义 `x86.addi/subi/andi/ori/xori`、`x86.condition`、
+`x86.syscall`、legacy scalar FP、`x86.convert` 和 x87 状态/算术操作，用来
+封装 flags、Jcc 条件读取、Linux x86-64 syscall ABI、CVT lane 布局、XMM
+高位保留与 x87 逻辑栈等 x86 专属语义。`mlir/IR1.td`
+当前定义：
 
 | 操作 | 意图 | 当前降级状态 |
 |---|---|---|
 | `ir1.ci`, `ir1.cf` | 整数/浮点常量 | 降到 `arith.constant` |
 | `ir1.load_state`, `ir1.store_state` | 按规范化槽、偏移、宽度和掩码访问状态 | 降到 LLVM GEP/load/store |
 | `ir1.load`, `ir1.store` | 访存 | 降到 LLVM load/store |
+| `ir1.syscall` | 七参数宿主 syscall 边界 | 降到外部 `__sbt_syscall6` 调用 |
 | `ir1.addi/subi/muli/divi` | 通用整数运算 | 降到 `arith` |
 | `ir1.andi/ori/xori/shli/shrui/cmpi` | 通用位运算、移位与比较 | 降到 `arith` |
 | `ir1.addf/subf/mulf/divf` | 通用浮点运算 | 降到 `arith` |
 | `ir1.casti`, `ir1.bitcast` | 通用整数宽度转换与位转换 | 降到 `arith` |
+| `ir1.sitofp`, `ir1.fptosi`, `ir1.extf`, `ir1.truncf` | 标量或向量的通用数值转换 | 降到 `arith` |
+| `ir1.roundevenf` | 标量或向量的 nearest-even 舍入 | 经 `math` 降到 LLVM intrinsic |
 
 现有 ADD 提升以 `NameLoc` 保存反汇编文本，这是有价值的调试信息；未来还应增加结构化的源 PC 和字节属性。
 
@@ -73,8 +100,15 @@ IR0 的不变量：
 3. X86 Dialect 的寄存器操作仍以 LLVM 枚举编号作为暂存属性；第一阶段降级会立即规范化成 IR1 state slot，不允许该编号进入 IR1。
 4. flags 被整体建模为 `i64`，但 CF/PF/AF/ZF/SF/OF 的定义与未定义状态尚未区分。
 5. 内存操作缺少地址空间、volatile/alignment、endianness 和 fault 行为。
-6. 当前 module 仅建立单个 translated block，尚不能表达完整程序 CFG。
+6. 当前按 ELF 函数边界恢复可达的直接 JMP/Jcc CFG，并逐函数降为
+   `cf.br`/`cf.cond_br`；跨函数直接 CALL、跨 section relocation、间接跳转和
+   多入口仍未建模。
 7. 操作尚未完整声明 memory effects、traits 和 verifier，优化器无法安全分析全部副作用。
+8. 当前 `ir1.syscall` 明确采用 Linux x86-64 ABI；runtime helper 直接返回内核
+   RAX，X86 提升层另外回写 RCX（下一 RIP）和 R11（调用前 RFLAGS）。其他
+   操作系统 ABI、信号重启及完整特权态入口状态尚未建模。
+9. x87 当前把 ST0-ST7 规范化为八个逻辑 f80 值，支持常用二元算术和 pop；
+   尚未建模 control/status/tag word、物理 TOP、动态精度/舍入和异常状态。
 
 在这些问题解决前，不应把当前 IR1 文本视为稳定格式。
 

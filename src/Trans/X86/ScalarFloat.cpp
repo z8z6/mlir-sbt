@@ -1,13 +1,15 @@
 #include "Trans/X86/ScalarFloat.h"
-
 #include "IR/IR1.h"
 #include "IR/IR1Converter.h"
 #include "IR/X86.h"
-
+#include "tblgen/X86IR1Converter.h"
 #include <cassert>
 
 using namespace mlir;
+using namespace z8;
+using namespace z8::x86::trans;
 
+// ---- shared helpers ----
 namespace z8::x86::trans {
 
 void translateScalarFloat(ConversionContext &context, unsigned width,
@@ -28,3 +30,67 @@ void translateScalarFloat(ConversionContext &context, unsigned width,
 }
 
 } // namespace z8::x86::trans
+
+// ---- ADDSS converters ----
+void X86_ADDSSrr_Int_IR1Converter::op(ConversionContext &context) {
+  translateScalarFloat(context, 32, ScalarFloatKind::Add);
+}
+void X86_ADDSSrm_Int_IR1Converter::op(ConversionContext &context) {
+  translateScalarFloat(context, 32, ScalarFloatKind::Add);
+}
+
+// ---- ADDSD converters ----
+void X86_ADDSDrr_Int_IR1Converter::op(ConversionContext &context) {
+  translateScalarFloat(context, 64, ScalarFloatKind::Add);
+}
+void X86_ADDSDrm_Int_IR1Converter::op(ConversionContext &context) {
+  translateScalarFloat(context, 64, ScalarFloatKind::Add);
+}
+
+// ---- SUBSS converters ----
+void X86_SUBSSrr_Int_IR1Converter::op(ConversionContext &context) {
+  translateScalarFloat(context, 32, ScalarFloatKind::Sub);
+}
+void X86_SUBSSrm_Int_IR1Converter::op(ConversionContext &context) {
+  translateScalarFloat(context, 32, ScalarFloatKind::Sub);
+}
+
+// ---- SUBSD converters ----
+void X86_SUBSDrr_Int_IR1Converter::op(ConversionContext &context) {
+  translateScalarFloat(context, 64, ScalarFloatKind::Sub);
+}
+void X86_SUBSDrm_Int_IR1Converter::op(ConversionContext &context) {
+  translateScalarFloat(context, 64, ScalarFloatKind::Sub);
+}
+
+// ---- MULSS converters ----
+void X86_MULSSrr_Int_IR1Converter::op(ConversionContext &context) {
+  translateScalarFloat(context, 32, ScalarFloatKind::Mul);
+}
+void X86_MULSSrm_Int_IR1Converter::op(ConversionContext &context) {
+  translateScalarFloat(context, 32, ScalarFloatKind::Mul);
+}
+
+// ---- MULSD converters ----
+void X86_MULSDrr_Int_IR1Converter::op(ConversionContext &context) {
+  translateScalarFloat(context, 64, ScalarFloatKind::Mul);
+}
+void X86_MULSDrm_Int_IR1Converter::op(ConversionContext &context) {
+  translateScalarFloat(context, 64, ScalarFloatKind::Mul);
+}
+
+// ---- DIVSS converters ----
+void X86_DIVSSrr_Int_IR1Converter::op(ConversionContext &context) {
+  translateScalarFloat(context, 32, ScalarFloatKind::Div);
+}
+void X86_DIVSSrm_Int_IR1Converter::op(ConversionContext &context) {
+  translateScalarFloat(context, 32, ScalarFloatKind::Div);
+}
+
+// ---- DIVSD converters ----
+void X86_DIVSDrr_Int_IR1Converter::op(ConversionContext &context) {
+  translateScalarFloat(context, 64, ScalarFloatKind::Div);
+}
+void X86_DIVSDrm_Int_IR1Converter::op(ConversionContext &context) {
+  translateScalarFloat(context, 64, ScalarFloatKind::Div);
+}

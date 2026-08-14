@@ -57,6 +57,27 @@ def StoreOp : IR1_Op<"store"> {
   let arguments = (ins AnyType:$value, AnyInteger:$addr);
 }
 
+// Architecture-neutral host syscall boundary. The x86 lowering supplies the
+// Linux x86-64 register mapping; the LLVM lowering calls __sbt_syscall6.
+def SyscallOp : IR1_Op<"syscall"> {
+  let arguments = (ins I64:$number, I64:$arg0, I64:$arg1, I64:$arg2,
+                       I64:$arg3, I64:$arg4, I64:$arg5);
+  let results = (outs I64:$res);
+}
+
+def ExternalCallOp : IR1_Op<"external_call"> {
+  let arguments = (ins I64:$arg0, I64:$arg1, I64:$arg2,
+                       I64:$arg3, I64:$arg4, I64:$arg5,
+                       StrAttr:$callee);
+  let results = (outs I64:$res);
+}
+
+def IndirectCallOp : IR1_Op<"indirect_call"> {
+  let arguments = (ins I64:$callee, I64:$arg0, I64:$arg1, I64:$arg2,
+                       I64:$arg3, I64:$arg4, I64:$arg5);
+  let results = (outs I64:$res);
+}
+
 def AddIOp : IR1_Op<"addi"> {
   let arguments = (ins AnyInteger:$lhs, AnyInteger:$rhs);
   let results = (outs AnyInteger:$res);
@@ -86,7 +107,37 @@ def CastIOp : IR1_Op<"casti"> {
   let results = (outs AnyInteger:$res);
 }
 
+def ExtSIOp : IR1_Op<"extsi"> {
+  let arguments = (ins AnyInteger:$value);
+  let results = (outs AnyInteger:$res);
+}
+
 def BitcastOp : IR1_Op<"bitcast"> {
+  let arguments = (ins AnyType:$value);
+  let results = (outs AnyType:$res);
+}
+
+def SIToFPOp : IR1_Op<"sitofp"> {
+  let arguments = (ins AnyType:$value);
+  let results = (outs AnyType:$res);
+}
+
+def FPToSIOp : IR1_Op<"fptosi"> {
+  let arguments = (ins AnyType:$value);
+  let results = (outs AnyType:$res);
+}
+
+def ExtFOp : IR1_Op<"extf"> {
+  let arguments = (ins AnyType:$value);
+  let results = (outs AnyType:$res);
+}
+
+def TruncFOp : IR1_Op<"truncf"> {
+  let arguments = (ins AnyType:$value);
+  let results = (outs AnyType:$res);
+}
+
+def RoundEvenFOp : IR1_Op<"roundevenf"> {
   let arguments = (ins AnyType:$value);
   let results = (outs AnyType:$res);
 }

@@ -31,7 +31,14 @@ cmake --build cmake-build-debug -j 12
 
 ## 3. 运行
 
-`sbt` 的输入是目标文件，`-o` 指定翻译后的目标文件：
+`sbt` 接受 ELF 目标文件或可执行文件。省略 `-o` 时，默认输出
+`<input>.sbt.o`：
+
+```sh
+./build/sbt --quiet -i input.o
+```
+
+也可以显式提供输出路径：
 
 ```sh
 ./build/sbt -i input.o -o translated.o
@@ -39,12 +46,14 @@ cmake --build cmake-build-debug -j 12
 
 当前程序会依次向输出流打印：
 
-- IR0 反汇编；
-- 提升后的 IR1 module；
-- 完整 lowering 后的 LLVM Dialect module。
+- 默认只打印发现的函数名；
+- `--print-ir0` 打印函数、基本块、边和反汇编；
+- `--print-ir1` 打印提升后的 IR1 module；
+- `--print-lowered-ir` 打印完整 lowering 后的 LLVM Dialect module；
+- `--print-stats` 打印函数发现字节覆盖率和目标 `.text` 膨胀率。
 
-随后通过 LLVM TargetMachine 写出 `-o` 指定的 relocatable object。测试构建使用
-`--quiet` 关闭中间打印。
+LLVM TargetMachine 写出 relocatable object。测试构建使用 `--quiet` 关闭默认
+函数名输出；显式指定的 `--print-*` 输出仍然生效。
 
 ## 4. 添加一条 x86 指令语义
 
@@ -82,12 +91,15 @@ cmake --build cmake-build-debug -j 12
 
 - `File::CurrentFile`、`IR1Context::Instance()` 和静态 x86 machine 带来全局状态和生命周期限制；
 - `getMachine` 对非 x86 triple 没有明确失败路径；
-- `File::disas()` 线性扫描所有 text section，忽略符号、relocation 和代码/数据边界；
-- decode fail 仅跳过一个字节；
+- 函数发现目前依赖 ELF `STT_FUNC`，尚未结合 `.eh_frame`、递归 CALL 目标和
+  relocation 恢复 stripped binary 中缺失的函数；
+- 函数内 CFG 目前只解析直接 JMP/Jcc/RET，跨函数 CALL 与间接控制流仍未接入；
+- decode fail 会终止当前函数和整个翻译，尚未提供可恢复的诊断模式；
 - `convertMCInst` 对完全没有分派 case 的 opcode 仍缺少统一的 unsupported 诊断；
 - IR1 的整数类型约束过宽，builder 又固定使用 i32/i64；
 - IR1 操作没有完整 verifier、side effect interface 和 traits；
-- module 当前只有单个 `translated_block`，尚没有从输入恢复的真实 CFG；
+- module 已按 IR0 函数和基本块生成多个 `func.func`，但内部函数调用和稳定的
+  源符号到输出符号映射尚未完成；
 - translated block state ABI 仅覆盖 GPR 和 RFLAGS，尚未覆盖完整控制流和异常状态。
 
 ## 7. 修改约定

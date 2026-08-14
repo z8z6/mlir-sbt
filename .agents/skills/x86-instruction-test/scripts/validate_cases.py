@@ -11,6 +11,7 @@ REGISTERS = {"rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp",
 FLAGS = {"cf", "pf", "af", "zf", "sf", "tf", "if", "df", "of"}
 FILES = {"case.asm", "input.toml", "output.toml", "README.md"}
 RUNTIME_REGISTERS = {"rsp", "cs", "ss", "ds", "es", "fs", "gs"}
+X87_REGISTERS = {f"st{i}" for i in range(8)}
 
 def validate(case: Path) -> list[str]:
     errors = []
@@ -43,6 +44,9 @@ def validate(case: Path) -> list[str]:
         invalid_vectors = set(vectors) - {f"xmm{i}" for i in range(16)}
         if invalid_vectors:
             errors.append(f"{case / filename}: invalid vector register(s) {sorted(invalid_vectors)}")
+        x87 = data.get("x87", {})
+        if x87 and set(x87) != X87_REGISTERS:
+            errors.append(f"{case / filename}: x87 table must contain st0 through st7")
     asm = (case / "case.asm").read_text().splitlines()
     instructions = [line.strip() for line in asm if line.strip() and not
                     re.match(r"^(bits|section|global|run_case:|ret$)", line.strip())]

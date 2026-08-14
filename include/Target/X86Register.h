@@ -39,7 +39,17 @@ enum class X86RegisterSlot : uint32_t {
   XMM13 = 43,
   XMM14 = 45,
   XMM15 = 47,
-  Count = 49
+  // Logical x87 stack entries. Each 80-bit value occupies two 64-bit state
+  // slots so loads/stores can use a naturally aligned 128-bit container.
+  X87ST0 = 49,
+  X87ST1 = 51,
+  X87ST2 = 53,
+  X87ST3 = 55,
+  X87ST4 = 57,
+  X87ST5 = 59,
+  X87ST6 = 61,
+  X87ST7 = 63,
+  Count = 65
 };
 
 struct X86RegisterDesc {

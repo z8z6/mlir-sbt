@@ -18,6 +18,7 @@ class MCInst;
 }
 
 namespace mlir {
+class Block;
 class Value;
 }
 
@@ -30,8 +31,11 @@ struct ConversionContext {
   std::vector<mlir::Value> Dst;
   std::vector<mlir::Value> ImplicitDst;
   std::vector<llvm::MCRegister> ImplicitOperand;
+  mlir::Block* BranchTarget;
+  mlir::Block* Fallthrough;
 
-  ConversionContext(const IR0&);
+  ConversionContext(const IR0&, mlir::Block* branchTarget = nullptr,
+                    mlir::Block* fallthrough = nullptr);
   mlir::NameLoc getNameLoc() const;
 };
 
@@ -47,10 +51,12 @@ public:
   virtual void op(ConversionContext&);
   virtual void loadSrcOperand(ConversionContext&);
   virtual void storeDstOperand(ConversionContext&);
-  void run(const IR0&);
+  void run(const IR0&, mlir::Block* branchTarget = nullptr,
+           mlir::Block* fallthrough = nullptr);
 
   static IR1Context* Ctx;
 };
 
-void convertMCInst(const IR0& IR);
+void convertMCInst(const IR0& IR, mlir::Block* branchTarget = nullptr,
+                   mlir::Block* fallthrough = nullptr);
 }

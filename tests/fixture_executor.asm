@@ -8,6 +8,8 @@ extern fixture_input
 extern fixture_output
 extern fixture_xmm_input
 extern fixture_xmm_output
+extern fixture_x87_input
+extern fixture_x87_output
 
 %define RAX 0
 %define RBX 8
@@ -96,7 +98,28 @@ execute_case:
   movdqu xmm14, [rel fixture_xmm_input + 224]
   movdqu xmm15, [rel fixture_xmm_input + 240]
 
+  ; Fill the physical stack in reverse so logical ST0..ST7 match the fixture.
+  fninit
+  fld tword [rel fixture_x87_input + 112]
+  fld tword [rel fixture_x87_input + 96]
+  fld tword [rel fixture_x87_input + 80]
+  fld tword [rel fixture_x87_input + 64]
+  fld tword [rel fixture_x87_input + 48]
+  fld tword [rel fixture_x87_input + 32]
+  fld tword [rel fixture_x87_input + 16]
+  fld tword [rel fixture_x87_input + 0]
+
   call run_case
+
+  ; Destructively drain the post-instruction logical stack into stable slots.
+  fstp tword [rel fixture_x87_output + 0]
+  fstp tword [rel fixture_x87_output + 16]
+  fstp tword [rel fixture_x87_output + 32]
+  fstp tword [rel fixture_x87_output + 48]
+  fstp tword [rel fixture_x87_output + 64]
+  fstp tword [rel fixture_x87_output + 80]
+  fstp tword [rel fixture_x87_output + 96]
+  fstp tword [rel fixture_x87_output + 112]
 
   movdqu [rel fixture_xmm_output + 0], xmm0
   movdqu [rel fixture_xmm_output + 16], xmm1

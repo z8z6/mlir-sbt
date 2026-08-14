@@ -1,0 +1,39 @@
+[registers]
+rax = 0x00000000ffffff80
+rbx = "unchanged"
+rcx = "unchanged"
+rdx = "unchanged"
+rsi = "unchanged"
+rdi = "unchanged"
+rbp = "unchanged"
+rsp = "ignore"
+r8 = "unchanged"
+r9 = "unchanged"
+r10 = "unchanged"
+r11 = "unchanged"
+r12 = "unchanged"
+r13 = "unchanged"
+r14 = "unchanged"
+r15 = "unchanged"
+rip = "ignore"
+eflags = "unchanged"
+cs = "unchanged"
+ss = "unchanged"
+ds = "unchanged"
+es = "unchanged"
+fs = "unchanged"
+gs = "unchanged"
+
+[flags]
+cf = "unchanged"
+pf = "unchanged"
+af = "unchanged"
+zf = "unchanged"
+sf = "unchanged"
+tf = "unchanged"
+if = "unchanged"
+df = "unchanged"
+of = "unchanged"
+
+[memory]
+"rdi+24" = 0x0000000000000080

@@ -13,9 +13,15 @@ All names must occur in both TOML files. Numeric values use hexadecimal.
 
 - Input `rdi = "memory_base"` gives the case a valid base for `rdi+24`.
 - Input `rip = "run_case"` documents the instruction entry.
+- Input register or memory value `"call_target"` resolves to the generic
+  returning SysV helper used by indirect CALL fixtures.
 - Input `rsp`, and segment registers may use `"runtime"` when owned by the
   harness/environment.
 - Output `rip` and `rsp` may use `"ignore"` because calls and ASLR vary them.
+- Output `rcx = "rip+2"` expresses SYSCALL's fixed two-byte next-instruction
+  address without embedding an ASLR-dependent native code address.
+- Output `rax = "rdi+24"` can express an effective-address result using the
+  fixture's symbolic memory base, as required by LEA cases.
 - Output `eflags = "flags"` delegates comparison to the complete `[flags]`
   table. Use this when an instruction leaves at least one flag undefined.
 - Output registers unaffected by the instruction use `"unchanged"`.
@@ -42,7 +48,8 @@ and preserved flags must still use `0`, `1`, or `"unchanged"`.
 
 ## Memory
 
-Use a `[memory]` table whose quoted keys are symbolic effective addresses:
+Use a `[memory]` table whose quoted keys are aligned symbolic effective
+addresses from `"rdi+24"` through `"rdi+80"`:
 
 ```toml
 [memory]
@@ -51,13 +58,27 @@ Use a `[memory]` table whose quoted keys are symbolic effective addresses:
 
 Input describes initialization. Output lists addresses that must be checked
 and their expected complete 64-bit values, including preservation around
-narrow writes.
+narrow writes. A 128-bit memory operand uses two consecutive entries, for
+example `"rdi+24"` for the low 64 bits and `"rdi+32"` for the high 64 bits.
 
 ## Assembly purity
 
 `case.asm` contains assembler directives, the `run_case` label, exactly one
 instruction under test, and `ret`. It must not contain `mov`, `push`, `pop`, or
 other preparation/observation instructions.
+
+## x87 stack
+
+x87 fixtures add an `[x87]` table containing every logical stack register from
+`st0` through `st7`. Values are exact 80-bit extended-precision hexadecimal
+bit patterns (20 hexadecimal digits), independent of the host `long double`
+layout. Output entries use an exact value or `"unchanged"`. A popping
+instruction shifts the remaining logical stack registers down; only the newly
+empty `st7` output may use `"ignore"`.
+
+The fixture runner initializes a full eight-entry x87 stack and compares the
+post-instruction logical order. Control word, status word, tag word, physical
+TOP, and unmasked exception behavior are outside this fixture schema.
 
 ## Execution paths
 

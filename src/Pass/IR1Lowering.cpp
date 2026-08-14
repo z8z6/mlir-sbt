@@ -3,12 +3,16 @@
 #include "IR/IR1.h"
 
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
+#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
+#include "mlir/Conversion/MathToLLVM/MathToLLVM.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -178,6 +182,90 @@ struct StoreOpLowering : public OpConversionPattern<ir1::StoreOp> {
   }
 };
 
+struct SyscallOpLowering : public OpConversionPattern<ir1::SyscallOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ir1::SyscallOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    constexpr StringLiteral RuntimeName = "__sbt_syscall6";
+    ModuleOp module = op->getParentOfType<ModuleOp>();
+    auto runtime = module.lookupSymbol<LLVM::LLVMFuncOp>(RuntimeName);
+    if (!runtime) {
+      OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToStart(module.getBody());
+      SmallVector<Type> arguments(7, rewriter.getI64Type());
+      auto functionType = LLVM::LLVMFunctionType::get(
+          rewriter.getI64Type(), arguments, /*isVarArg=*/false);
+      runtime = LLVM::LLVMFuncOp::create(rewriter, op.getLoc(), RuntimeName,
+                                         functionType);
+    }
+    SmallVector<Value> arguments{adaptor.getNumber(), adaptor.getArg0(),
+                                 adaptor.getArg1(),   adaptor.getArg2(),
+                                 adaptor.getArg3(),   adaptor.getArg4(),
+                                 adaptor.getArg5()};
+    auto call = LLVM::CallOp::create(rewriter, op.getLoc(), runtime, arguments);
+    rewriter.replaceOp(op, call.getResults());
+    return success();
+  }
+};
+
+struct ExternalCallOpLowering
+    : public OpConversionPattern<ir1::ExternalCallOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ir1::ExternalCallOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    ModuleOp module = op->getParentOfType<ModuleOp>();
+    StringRef name = op.getCallee();
+    auto function = module.lookupSymbol<LLVM::LLVMFuncOp>(name);
+    if (!function) {
+      OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToStart(module.getBody());
+      SmallVector<Type> arguments(6, rewriter.getI64Type());
+      auto functionType = LLVM::LLVMFunctionType::get(
+          rewriter.getI64Type(), arguments, /*isVarArg=*/false);
+      function =
+          LLVM::LLVMFuncOp::create(rewriter, op.getLoc(), name, functionType);
+    }
+    SmallVector<Value> arguments{adaptor.getArg0(), adaptor.getArg1(),
+                                 adaptor.getArg2(), adaptor.getArg3(),
+                                 adaptor.getArg4(), adaptor.getArg5()};
+    auto call =
+        LLVM::CallOp::create(rewriter, op.getLoc(), function, arguments);
+    rewriter.replaceOp(op, call.getResults());
+    return success();
+  }
+};
+
+struct IndirectCallOpLowering
+    : public OpConversionPattern<ir1::IndirectCallOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ir1::IndirectCallOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto pointerType = LLVM::LLVMPointerType::get(rewriter.getContext());
+    Value callee = LLVM::IntToPtrOp::create(rewriter, op.getLoc(), pointerType,
+                                            adaptor.getCallee());
+    SmallVector<Value> operands{callee,
+                                adaptor.getArg0(),
+                                adaptor.getArg1(),
+                                adaptor.getArg2(),
+                                adaptor.getArg3(),
+                                adaptor.getArg4(),
+                                adaptor.getArg5()};
+    SmallVector<Type> arguments(6, rewriter.getI64Type());
+    auto functionType = LLVM::LLVMFunctionType::get(
+        rewriter.getI64Type(), arguments, /*isVarArg=*/false);
+    auto call =
+        LLVM::CallOp::create(rewriter, op.getLoc(), functionType, operands);
+    rewriter.replaceOp(op, call.getResults());
+    return success();
+  }
+};
+
 template <typename SourceOp, typename TargetOp>
 struct BinaryIOpLowering : OpConversionPattern<SourceOp> {
   using OpConversionPattern<SourceOp>::OpConversionPattern;
@@ -216,6 +304,17 @@ struct CastIOpLowering : OpConversionPattern<ir1::CastIOp> {
   }
 };
 
+struct ExtSIOpLowering : OpConversionPattern<ir1::ExtSIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ir1::ExtSIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOpWithNewOp<arith::ExtSIOp>(op, op.getType(),
+                                                adaptor.getValue());
+    return success();
+  }
+};
+
 struct BitcastOpLowering : OpConversionPattern<ir1::BitcastOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -226,6 +325,24 @@ struct BitcastOpLowering : OpConversionPattern<ir1::BitcastOp> {
     return success();
   }
 };
+
+template <typename SourceOp, typename TargetOp>
+struct UnaryCastOpLowering : OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(SourceOp op, typename SourceOp::Adaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOpWithNewOp<TargetOp>(op, op.getType(), adaptor.getValue());
+    return success();
+  }
+};
+
+using SIToFPOpLowering = UnaryCastOpLowering<ir1::SIToFPOp, arith::SIToFPOp>;
+using FPToSIOpLowering = UnaryCastOpLowering<ir1::FPToSIOp, arith::FPToSIOp>;
+using ExtFOpLowering = UnaryCastOpLowering<ir1::ExtFOp, arith::ExtFOp>;
+using TruncFOpLowering = UnaryCastOpLowering<ir1::TruncFOp, arith::TruncFOp>;
+using RoundEvenFOpLowering =
+    UnaryCastOpLowering<ir1::RoundEvenFOp, math::RoundEvenOp>;
 
 using SubIOpLowering = BinaryIOpLowering<ir1::SubIOp, arith::SubIOp>;
 using AndIOpLowering = BinaryIOpLowering<ir1::AndIOp, arith::AndIOp>;
@@ -257,7 +374,8 @@ struct IR1LoweringPass
 
   void getDependentDialects(DialectRegistry &registry) const override {
     registry
-        .insert<arith::ArithDialect, func::FuncDialect, LLVM::LLVMDialect>();
+        .insert<arith::ArithDialect, math::MathDialect, cf::ControlFlowDialect,
+                func::FuncDialect, LLVM::LLVMDialect>();
   }
 
   void runOnOperation() final {
@@ -267,14 +385,19 @@ struct IR1LoweringPass
     LLVMTypeConverter typeConverter(&getContext());
     RewritePatternSet patterns(&getContext());
     arith::populateArithToLLVMConversionPatterns(typeConverter, patterns);
+    populateMathToLLVMConversionPatterns(typeConverter, patterns);
+    cf::populateControlFlowToLLVMConversionPatterns(typeConverter, patterns);
     populateFuncToLLVMConversionPatterns(typeConverter, patterns);
     patterns
         .add<ConstIntOpLowering, LoadStateOpLowering, StoreStateOpLowering,
              AddIOpLowering, MulIOpLowering, LoadOpLowering, StoreOpLowering,
+             SyscallOpLowering, ExternalCallOpLowering, IndirectCallOpLowering,
              SubIOpLowering, AndIOpLowering, OrIOpLowering, XOrIOpLowering,
              ShRUIOpLowering, ShLIOpLowering, CmpIOpLowering, CastIOpLowering,
-             BitcastOpLowering, AddFOpLowering, SubFOpLowering, MulFOpLowering,
-             DivFOpLowering>(typeConverter, &getContext());
+             ExtSIOpLowering, BitcastOpLowering, AddFOpLowering, SubFOpLowering,
+             MulFOpLowering, DivFOpLowering, SIToFPOpLowering, FPToSIOpLowering,
+             ExtFOpLowering, TruncFOpLowering, RoundEvenFOpLowering>(
+            typeConverter, &getContext());
 
     if (failed(
             applyFullConversion(getOperation(), target, std::move(patterns))))

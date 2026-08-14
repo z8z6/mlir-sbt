@@ -20,7 +20,8 @@ void X86ImplGenerator::run(raw_ostream &OS) const {
         "using namespace z8;\n"
         "using namespace llvm;\n"
         "using namespace llvm::X86;\n\n"
-        "void z8::convertMCInst(const IR0& IR) {\n"
+        "void z8::convertMCInst(const IR0& IR, mlir::Block* BranchTarget, "
+        "mlir::Block* Fallthrough) {\n"
         "  switch (IR.Inst.getOpcode()) {\n";
 
   auto Insts = RK.getAllDerivedDefinitions("X86Inst");
@@ -30,7 +31,17 @@ void X86ImplGenerator::run(raw_ostream &OS) const {
     if (!OpcodeName.starts_with("ADD") && !OpcodeName.starts_with("SUB") &&
         !OpcodeName.starts_with("AND") && !OpcodeName.starts_with("OR") &&
         !OpcodeName.starts_with("XOR") && !OpcodeName.starts_with("MOV") &&
-        !OpcodeName.starts_with("MUL") && !OpcodeName.starts_with("DIV"))
+        !OpcodeName.starts_with("MUL") && !OpcodeName.starts_with("DIV") &&
+        !OpcodeName.starts_with("JMP") && !OpcodeName.starts_with("JCC") &&
+        !OpcodeName.starts_with("LEA") && !OpcodeName.starts_with("PUSH") &&
+        !OpcodeName.starts_with("POP") && !OpcodeName.starts_with("CALL") &&
+        !OpcodeName.starts_with("CVT") && !OpcodeName.starts_with("CMP") &&
+        !OpcodeName.starts_with("TEST") &&
+        !OpcodeName.starts_with("CMOV") && !OpcodeName.starts_with("SETCC") &&
+        !OpcodeName.starts_with("NEG") && !OpcodeName.starts_with("NOT") &&
+        OpcodeName != "SYSCALL" && OpcodeName != "ENDBR64" &&
+        OpcodeName != "NOOP" && OpcodeName != "NOOPL" &&
+        OpcodeName != "NOOPW")
       continue;
 
     string ClassName = "X86_" + OpcodeName.str() + "_IR1Converter";
@@ -39,11 +50,10 @@ void X86ImplGenerator::run(raw_ostream &OS) const {
        << ":\n"
           "    "
        << ClassName
-       << "::Instance().run(IR);\n"
+       << "::Instance().run(IR, BranchTarget, Fallthrough);\n"
           "    break;\n";
   }
-  OS << "  case RET64:\n"
-        "  case LOCK_PREFIX:\n"
+  OS << "  case LOCK_PREFIX:\n"
         "    break;\n"
         "  default:\n"
         "    BaseIR1Converter::Ctx->markConversionFailure();\n"

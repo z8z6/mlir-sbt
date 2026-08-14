@@ -17,16 +17,16 @@
 已有结果：
 
 - x86 ELF 代码 section 可被反汇编为 `MCInst`；
-- IR0 可以记录并打印地址和汇编；
+- IR0 可以记录函数、基本块、显式边、地址和汇编；
 - IR1 Dialect 和 C++ builder 可生成；
 - 当前测试矩阵中的 ADD 寄存器、立即数、内存读写编码可提升为 IR1；
 - 当前 IR1 子集可完整降到 LLVM Dialect/LLVM IR，并发射 x86 目标文件；
 - 30 个 ADD 和 32 个 SUB fixture 已接入原生和静态翻译双路径测试，完整比较
   寄存器、flags 和测试内存。
 
-基线已经完成指令级 ADD 纵向闭环，但不等于程序级翻译完成：当前没有从输入
-恢复 CFG，state ABI 尚未覆盖 RIP、段基址和异常，guest 内存也仍是受约束的
-fixture 槽。测试细节见[指令测试流程](testing.md)。
+基线已经完成指令级 ADD 纵向闭环，并可从 ELF 函数恢复直接 JMP/Jcc CFG；但
+内部 CALL、间接控制流、RIP、段基址和异常尚未完整建模，guest 内存也仍是受
+约束的 fixture 槽。测试细节见[指令测试流程](testing.md)。
 
 ## 3. M0：稳定原型基础设施
 

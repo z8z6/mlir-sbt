@@ -53,14 +53,15 @@ x86 → x86 并非多余步骤：它可以隔离跨架构指令选择问题，�
 | 对象文件 | `include/Object`, `src/Object` | 打开目标文件、遍历代码 section |
 | 目标机抽象 | `include/Target`, `src/Target` | 初始化 LLVM x86 MC 组件，提供反汇编器和指令描述 |
 | IR0 | `include/IR/IR0.h`, `src/IR/IR0.cpp` | 保存地址与 `MCInst`，打印汇编文本 |
-| X86 Dialect | `mlir/X86.td`, `include/IR/X86.h` | 封装 flags、legacy XMM 等 x86 特有语义 |
+| X86 Dialect | `mlir/X86.td`, `include/IR/X86.h` | 封装 flags、legacy XMM、x87 逻辑栈等 x86 特有语义 |
 | IR1 Dialect | `mlir/IR1.td`, `include/IR/IR1.h` | 定义架构通用基础计算与状态操作 |
 | 指令提升框架 | `src/IR/IR1Converter.cpp` | 统一读取显式操作数并写回结果 |
-| x86 指令翻译 | `src/Trans/X86/` | 按指令名组织翻译函数，并复用寻址、操作数与架构状态辅助逻辑 |
+| x86 指令翻译 | `src/Trans/X86/` | 按语义族组织翻译函数（Arithmetic、Logical、Move、ControlFlow 等），并复用寻址、操作数与架构状态辅助逻辑 |
 | 转换器生成 | `tblgen/` | 从 LLVM x86 TableGen 记录生成转换器类及 opcode switch |
 | X86 降级 Pass | `src/Pass/X86Lowering.cpp` | 将 x86 flags 和 scalar FP 语义展开成 IR1 基础操作 |
 | IR1 降级 Pass | `src/Pass/IR1Lowering.cpp` | 将通用状态、计算和内存操作降到标准/LLVM Dialect |
 | 目标发射 | `src/IR/IR1.cpp` | 翻译到 LLVM IR，并通过宿主 TargetMachine 发射目标文件 |
+| ELF 函数发现 | `src/Object/File.cpp` | 读取 `STT_FUNC` 地址/大小、选择翻译函数并解析 PLT 外部符号 |
 
 ### 2.3 已验证的范围
 
@@ -75,11 +76,12 @@ x86 → x86 并非多余步骤：它可以隔离跨架构指令选择问题，�
 - 生成器仍会为所有名称以 `ADD` 开头的 x86 指令建立分派，但只有显式标记的
   converter 已实现语义；已分派但未实现的 converter 会令翻译失败；
 - 完全没有进入生成 switch 的 opcode 尚缺少统一的 unsupported 诊断；
-- 反汇编失败时跳过一个字节，没有记录 gap 或终止当前基本块；
-- 所有代码 section 被线性扫描，没有函数、符号、重定位和 CFG；
-- 当前 state ABI 覆盖 GPR、RFLAGS 与 XMM0-XMM15；RIP、段状态、异常和程序级
-  控制流尚未进入 translated block ABI。每个 XMM 寄存器作为两个连续的 64 位槽建模，
-  但 MXCSR、YMM/ZMM 和浮点异常状态尚未进入 ABI；
+- 反汇编失败会终止当前函数及翻译，但还没有结构化 gap/诊断模型；
+- ELF 符号函数和函数内直接 CFG 已建模；`.eh_frame`、内部 CALL、间接跳转及
+  完整 relocation 驱动的代码发现仍未实现；
+- 当前 65 槽 state ABI 覆盖 GPR、RFLAGS、XMM0-XMM15 与逻辑 x87 ST0-ST7；
+  XMM 和 80 位 x87 值各使用两个连续的 64 位槽。RIP、段状态、MXCSR、x87
+  control/status/tag/TOP、YMM/ZMM、异常和程序级控制流尚未进入 ABI；
 - `lock add` 的现有 fixture 只验证单线程结果，尚未验证翻译产物的并发原子性。
 
 ## 3. 目标架构
@@ -159,6 +161,33 @@ X86 Dialect（flags、隐式状态、legacy XMM 等源架构语义）
 
 LLVM IR 只承担已经显式化后的普通计算、控制流和运行时调用。源架构寄存器、精确 flags、间接分支解析等翻译辅助语义应在进入 LLVM IR 前处理完毕，或明确降级成 runtime ABI。
 
+legacy SSE CVT 指令先提升为 `x86.convert`，显式携带源/目标元素宽度、lane
+数量、舍入策略和 XMM 高位保留策略；随后展开为 IR1 的 `sitofp`、`fptosi`、
+`extf`、`truncf`、`roundevenf` 与位拼接操作。当前覆盖 44 个 rr/rm 解码形式。
+非 `CVTT*` 的浮点到整数转换固定按默认 round-to-nearest-even 展开；尚未把
+MXCSR 动态舍入控制和异常状态纳入 guest state。
+
+x87 常用算术先提升为 `x86.read_x87/write_x87/x87_binary/pop_x87`。逻辑
+ST0-ST7 以 80 位扩展精度值保存，算术展开为 IR1 的 `addf/subf/mulf/divf`；
+内存浮点源先由 f32/f64 扩展为 f80，整数内存源先做有符号整数到 f80 转换。
+弹栈形式在写回后移动逻辑栈。当前尚未建模物理 TOP、tag、控制字、状态字及
+x87 异常，因此该支持属于有限但端到端验证过的子集。
+
+当前 ELF 路径先从普通符号表和动态符号表收集所有 text `STT_FUNC`。同地址的
+符号被归一为一个函数并保留别名；零长度符号使用同 section 的下一函数或
+section 末尾推导范围。随后每个函数独立反汇编为 `IR0Function`，按直接 JMP、
+Jcc、RET 和分支目标划分 `IR0BasicBlock`，并在 `IR0CFG` 中记录 branch 与
+fallthrough 边。没有函数符号的可重定位指令 fixture 则把每个 text section
+表示为一个合成函数。
+
+默认会依次翻译所有发现的函数，每个 IR0 CFG 对应一个同名的 MLIR
+`func.func`。首选入口 `run_case`、`_start`、`main` 还会通过兼容包装导出为
+`translated_block`，供当前测试 runtime 调用。也可用
+`--function=<name>`（包括别名）只选择一个函数。对于 PIE，`--address-bias`
+将源虚拟地址映射到测试 runtime 的装载地址。直接 CALL 若命中 ELF PLT entry，
+会依据动态重定位解析为 `ir1.external_call`；其他 CALL 仍拒绝翻译，避免把内部
+控制流误当成宿主函数调用。
+
 ## 4. 运行时边界
 
 即使源/目标都是 x86，也建议预留一个小型 runtime。它负责纯静态代码难以表达的部分：
@@ -169,7 +198,10 @@ LLVM IR 只承担已经显式化后的普通计算、控制流和运行时调用
 - 需要时保存完整 guest state；
 - 未支持指令的受控 fallback（可选）。
 
-第一阶段可以完全不实现 runtime，但输入约束必须排除依赖上述能力的程序。
+当前已提供最小 Linux x86-64 syscall runtime：`ir1.syscall` 降为
+`__sbt_syscall6`，汇编 helper 完成 SysV 调用约定到内核 syscall 寄存器约定的
+转换并保留原始 RAX 返回值。间接控制流、信号、异常和通用 guest 地址空间仍需
+后续 runtime 支持。
 
 ## 5. 正确性与可观测性
 
@@ -183,3 +215,12 @@ LLVM IR 只承担已经显式化后的普通计算、控制流和运行时调用
 - `--verify-each`：每个 Pass 后执行 verifier。
 
 核心验证方式是差分执行：在相同初始寄存器/内存状态下运行原始片段和翻译后片段，比较定义的寄存器、flags、内存写入和退出原因。
+
+当前 IR 调试位置使用嵌套 `NameLoc`：外层保存 ELF 函数名，内层保存
+`源地址: IR0 反汇编`，并在 `func.func` 上附加 `ir0.function` 属性。两级 lowering
+沿用原操作位置，因此最终 LLVM Dialect 仍可追溯到函数和对应的 IR0 指令。
+
+`--print-stats` 的函数发现覆盖率按所有 text section 字节为分母、去重后的
+`STT_FUNC` 地址范围为分子；代码膨胀率按输出对象 text section 字节除以实际
+翻译的可达 IR0 指令字节计算。它们是静态字节指标，不代表运行时热点覆盖率或
+动态执行代码大小。

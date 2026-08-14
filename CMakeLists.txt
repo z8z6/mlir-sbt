@@ -92,9 +92,13 @@ set(MLIR_LIBS
         MLIRDialect
         MLIRArithDialect
         MLIRArithToLLVM
+        MLIRControlFlowDialect
+        MLIRControlFlowToLLVM
         MLIRFuncDialect
         MLIRFuncToLLVM
         MLIRLLVMDialect
+        MLIRMathDialect
+        MLIRMathToLLVM
         MLIRLLVMCommonConversion
         MLIRLLVMToLLVMIRTranslation
         MLIRTargetLLVMIRExport

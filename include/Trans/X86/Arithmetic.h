@@ -23,5 +23,17 @@ void translateBinaryMemoryDestination(ConversionContext &context,
                                       unsigned width,
                                       BinaryArithmeticKind kind);
 
+/// Compute arithmetic flags without writing the arithmetic result. These two
+/// operand layouts are shared by CMP register/immediate/memory encodings.
+void translateBinaryArithmeticRegisterFlags(ConversionContext &context,
+                                            unsigned width,
+                                            BinaryArithmeticKind kind);
+void translateBinaryArithmeticMemoryFlags(ConversionContext &context,
+                                          unsigned width,
+                                          BinaryArithmeticKind kind);
+void translateNegRegisterDestination(ConversionContext &context,
+                                     unsigned width);
+void translateNegMemoryDestination(ConversionContext &context, unsigned width);
+
 } // namespace x86::trans
 } // namespace z8
